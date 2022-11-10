@@ -53,7 +53,7 @@ public class ProtoDescriptorProvider {
   }
 
   private static final URI DEFAULT_DESCRIPTOR_LOCATION =
-      URI.createURI("platform:/plugin/com.google.eclipse.protobuf/descriptor.proto");
+      URI.createURI("platform:/plugin/com.google.eclipse.protobuf/google/protobuf/descriptor.proto");
   private static final String EXTENSION_ID = "com.google.eclipse.protobuf.descriptorSource";
   private static final Logger LOG =
       Logger.getLogger(ProtoDescriptorProvider.class.getCanonicalName());

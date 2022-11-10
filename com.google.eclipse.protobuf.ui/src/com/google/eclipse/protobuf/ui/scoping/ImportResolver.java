@@ -75,9 +75,17 @@ public class ImportResolver implements IImportResolver {
   private String internalResolveUri(Import anImport) {
     return resolveUri(imports.getPath(anImport), anImport.eResource());
   }
+  
+  private static final URI WELL_KNOWN_TYPES_LOCATION =
+	      URI.createURI("platform:/plugin/com.google.eclipse.protobuf/");
 
   private String resolveUri(String importUri, Resource resource) {
-    URI location =
+	// load the well-known types from the editor bundle instead of expecting them in the project
+    if(importUri.startsWith("google/protobuf/")) {
+    	return WELL_KNOWN_TYPES_LOCATION.toString() + importUri;
+    }
+	  
+	URI location =
         descriptorProvider.descriptorLocation(EResources.getProjectOf(resource), importUri);
     if (location != null) {
       return location.toString();
@@ -92,4 +100,6 @@ public class ImportResolver implements IImportResolver {
   public void invalidateCacheFor(Import anImport) {
     cache.invalidate(anImport);
   }
+  
+  
 }
