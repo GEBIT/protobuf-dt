@@ -10,7 +10,8 @@ package com.google.eclipse.protobuf.ui.builder.protoc;
 
 import static org.eclipse.ui.console.IConsoleConstants.ID_CONSOLE_VIEW;
 
-import static com.google.common.io.Closeables.closeQuietly;
+import java.io.IOException;
+
 import static com.google.eclipse.protobuf.ui.util.Workbenches.activeWorkbenchPage;
 
 import org.eclipse.ui.IWorkbenchPage;
@@ -65,6 +66,10 @@ class ConsolePrinter {
   }
 
   void close() {
-    closeQuietly(out);
+    try {
+		out.close();
+	} catch (IOException e) {
+		// ignore
+	}
   }
 }
