@@ -36,37 +36,13 @@
         xsi:type="setup:VariableTask"
         id="uri"
         name="git.clone.protobuf-dt.remoteURI"
-        defaultValue="https://protobuf-dt.googlesource.com/protobuf"
+        defaultValue="https://github.com/GEBIT/protobuf-dt.git"
         label="Protobuf-dt Git Repository"/>
     <setupTask
         xsi:type="setup.p2:P2Task"
         id="protobuf_p2_director">
       <requirement
           name="org.eclipse.xtext.sdk.feature.group"/>
-      <repository
-          url="http://download.eclipse.org/modeling/tmf/xtext/updates/composite/releases/"/>
-      <repository
-          url="http://download.eclipse.org/technology/swtbot/snapshots/"/>
-      <repository
-          url="http://download.eclipse.org/tools/cdt/releases/8.8.1"/>
-      <repository
-          url="http://download.eclipse.org/tools/orbit/downloads/drops/S20160501200945/repository/"/>
-      <repository
-          url="http://download.eclipse.org/modeling/tmf/xtext/updates/composite/latest/"/>
-      <repository
-          url="http://download.eclipse.org/eclipse/updates/4.6-I-builds"/>
-      <repository
-          url="http://download.eclipse.org/modeling/emf/updates/interim/"/>
-      <repository
-          url="http://download.eclipse.org/modeling/emft/mwe/updates/milestones/"/>
-      <repository
-          url="http://download.eclipse.org/tools/gef/gef4/updates/releases"/>
-      <repository
-          url="http://download.itemis.com/updates/milestones/"/>
-      <repository
-          url="http://download.eclipse.org/tools/cdt/builds/mars/milestones/"/>
-      <repository
-          url="http://download.eclipse.org/technology/swtbot/releases/latest/"/>
     </setupTask>
     <setupTask
         xsi:type="setup.targlets:TargletTask"
@@ -76,14 +52,6 @@
           activeRepositoryList="protobuf_repositories_list">
         <requirement
             name="*"/>
-        <requirement
-            name="org.eclipse.emf.mwe2.launcher.feature.group"/>
-        <requirement
-            name="de.itemis.xtext.antlr.feature.feature.group"/>
-        <requirement
-            name="de.itemis.xtext.antlr.sdk.feature.group"/>
-        <requirement
-            name="org.antlr.runtime"/>
         <requirement
             name="org.hamcrest.library.source"/>
         <requirement
@@ -98,34 +66,18 @@
             name="org.eclipse.platform.feature.group"/>
         <requirement
             name="org.eclipse.jdt.feature.group"/>
+        <requirement
+            name="org.eclipse.xtext.sdk.feature.group"/>
+        <requirement
+            name="com.google.guava"/>
         <sourceLocator
             rootFolder="${git.clone.protobuf-dt.location}"/>
         <repositoryList
             name="protobuf_repositories_list">
           <repository
-              url="http://download.eclipse.org/modeling/tmf/xtext/updates/composite/releases/"/>
+          url="http://download.eclipse.org/tools/orbit/downloads/drops/R20160520211859/repository/"/>
           <repository
-              url="http://download.eclipse.org/technology/swtbot/snapshots/"/>
-          <repository
-              url="http://download.eclipse.org/tools/cdt/releases/8.8.1"/>
-          <repository
-              url="http://download.eclipse.org/tools/orbit/downloads/drops/S20160501200945/repository/"/>
-          <repository
-              url="http://download.eclipse.org/modeling/tmf/xtext/updates/composite/latest/"/>
-          <repository
-              url="http://download.eclipse.org/eclipse/updates/4.6-I-builds"/>
-          <repository
-              url="http://download.eclipse.org/modeling/emf/updates/interim/"/>
-          <repository
-              url="http://download.eclipse.org/modeling/emft/mwe/updates/milestones/"/>
-          <repository
-              url="http://download.eclipse.org/tools/gef/gef4/updates/releases"/>
-          <repository
-              url="http://download.itemis.com/updates/milestones/"/>
-          <repository
-              url="http://download.eclipse.org/tools/cdt/builds/mars/milestones/"/>
-          <repository
-              url="http://download.eclipse.org/technology/swtbot/releases/latest/"/>
+          url="http://download.eclipse.org/releases/neon"/>
         </repositoryList>
       </targlet>
       <description></description>
