@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <feature
-      id="com.google.eclipse.protobuf"
+      id="de.gebit.eclipse.protobuf.feature"
       label="%featureName"
-      version="2.3.2.qualifier"
+      version="2.4.0.qualifier"
       provider-name="%providerName">
 
-   <description url="https://code.google.com/p/protobuf-dt/">
+   <description url="https://github.com/GEBIT/protobuf-dt">
       %description
    </description>
 
@@ -18,7 +18,7 @@
    </license>
 
    <url>
-      <update label="%updateSiteName" url="http://protobuf-dt.googlecode.com/git/update-site"/>
+      <update label="%updateSiteName" url="https://github.com/GEBIT/protobuf-dt/releases/latest/download/"/>
    </url>
 
    <requires>
@@ -37,14 +37,14 @@
    </requires>
 
    <plugin
-         id="com.google.eclipse.protobuf"
+         id="de.gebit.eclipse.protobuf"
          download-size="0"
          install-size="0"
          version="0.0.0"
          unpack="false"/>
 
    <plugin
-         id="com.google.eclipse.protobuf.ui"
+         id="de.gebit.eclipse.protobuf.ui"
          download-size="0"
          install-size="0"
          version="0.0.0"
