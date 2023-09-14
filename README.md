@@ -6,6 +6,10 @@ files.
 
 This is a fork of an originally Google-initiated project which has been largely dormant for years and is currently without an official maintainer, albeit the produc t itself has been working reliably for years without any changes. It was forked because it's in active use at GEBIT and some shortcomings regarding missing capabilites have come up.
 
+## Installing
+
+This forked plugin has now been listed in the Eclipse Marketplace and can thus easily be installed into any Eclipse version (all versions newer than Neon should work): https://marketplace.eclipse.org/content/protocol-buffer-editor
+
 ## Preparing a development workspace
 
 Download the [Eclipse Installer](https://eclipse.org/downloads/).
@@ -54,3 +58,7 @@ Right-click on **GenerateProtobuf.mwe2.launch** and run this launch config, whic
 ## Building a release
 
 This plugin currently uses the "oldschool" PDE export workflow from an Eclipse IDE, so you can build an update site by exporting the "feature" project as an installable feature. This also means that version numbers must be manually managed in the META-INF files.
+
+## Releasing
+
+The plugin is currently released on GitHub and uses GitHub Releases as an Eclipse updatesite. This is possible by flattening the update site structure with the "repoflattener.java" jbang script checked in under /releng/jbang/repoflattener.java, which can be given a "normal" updatesite path and which then produces a flattened updatesite without the typical "plugins" and "features" directories. The files in this flattened updatesite can then be released on GitHub and imported into Eclipse as a normal updatesite. These update sites can also be submitted to the Eclipse Marketplace for inclusion into the official plugin directory.
