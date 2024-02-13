@@ -77,7 +77,7 @@ public class ImportResolver implements IImportResolver {
   }
   
   private static final URI WELL_KNOWN_TYPES_LOCATION =
-	      URI.createURI("platform:/plugin/com.google.eclipse.protobuf/");
+	      URI.createURI("platform:/plugin/de.gebit.eclipse.protobuf/");
 
   private String resolveUri(String importUri, Resource resource) {
 	// load the well-known types from the editor bundle instead of expecting them in the project
