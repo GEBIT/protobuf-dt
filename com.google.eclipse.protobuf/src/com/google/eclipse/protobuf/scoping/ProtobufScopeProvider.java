@@ -15,10 +15,12 @@ import com.google.eclipse.protobuf.naming.ProtobufQualifiedNameProvider;
 import com.google.eclipse.protobuf.protobuf.ComplexType;
 import com.google.eclipse.protobuf.protobuf.ComplexTypeLink;
 import com.google.eclipse.protobuf.protobuf.ComplexValue;
+import com.google.eclipse.protobuf.protobuf.ComplexValueCurlyBracket;
 import com.google.eclipse.protobuf.protobuf.ComplexValueField;
 import com.google.eclipse.protobuf.protobuf.CustomFieldOption;
 import com.google.eclipse.protobuf.protobuf.CustomOption;
 import com.google.eclipse.protobuf.protobuf.DefaultValueFieldOption;
+import com.google.eclipse.protobuf.protobuf.Enum;
 import com.google.eclipse.protobuf.protobuf.ExtensionFieldName;
 import com.google.eclipse.protobuf.protobuf.FieldName;
 import com.google.eclipse.protobuf.protobuf.Group;
@@ -32,8 +34,10 @@ import com.google.eclipse.protobuf.protobuf.OptionField;
 import com.google.eclipse.protobuf.protobuf.OptionSource;
 import com.google.eclipse.protobuf.protobuf.Package;
 import com.google.eclipse.protobuf.protobuf.Protobuf;
+import com.google.eclipse.protobuf.protobuf.SimpleValueField;
 import com.google.eclipse.protobuf.protobuf.TypeLink;
 import com.google.eclipse.protobuf.protobuf.ValueField;
+import com.google.eclipse.protobuf.protobuf.impl.SimpleValueFieldImpl;
 import com.google.eclipse.protobuf.util.EResources;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
@@ -319,6 +323,10 @@ public class ProtobufScopeProvider extends AbstractDeclarativeScopeProvider {
       } else {
         indexedElement = ((CustomOption) container).getSource().getTarget();
       }
+    }
+    if (container instanceof SimpleValueField) {
+    	FieldName fieldName = ((SimpleValueField) container).getName();
+    	indexedElement = fieldName.getTarget();
     }
     return createNormalizedScopeForIndexedElement(indexedElement, reference);
   }
