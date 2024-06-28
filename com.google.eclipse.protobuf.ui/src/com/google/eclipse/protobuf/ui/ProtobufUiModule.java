@@ -11,6 +11,7 @@ package com.google.eclipse.protobuf.ui;
 import static com.google.inject.name.Names.named;
 import static org.eclipse.ui.PlatformUI.isWorkbenchRunning;
 
+import com.google.eclipse.protobuf.formatting.IMaximumLineWidthProvider;
 import com.google.eclipse.protobuf.preferences.general.GeneralPreferences;
 import com.google.eclipse.protobuf.resource.IResourceVerifier;
 import com.google.eclipse.protobuf.scoping.IImportResolver;
@@ -19,6 +20,8 @@ import com.google.eclipse.protobuf.ui.builder.nature.ProtobufEditorCallback;
 import com.google.eclipse.protobuf.ui.documentation.ProtobufDocumentationProvider;
 import com.google.eclipse.protobuf.ui.editor.FileOutsideWorkspaceIconUpdater;
 import com.google.eclipse.protobuf.ui.editor.ProtobufUriEditorOpener;
+import com.google.eclipse.protobuf.ui.editor.formatting.CustomPreferenceStoreIndentationInformation;
+import com.google.eclipse.protobuf.ui.editor.formatting.EditorMaximumLineWidthProvider;
 import com.google.eclipse.protobuf.ui.editor.hyperlinking.ProtobufHyperlinkDetector;
 import com.google.eclipse.protobuf.ui.editor.model.ProtobufDocumentProvider;
 import com.google.eclipse.protobuf.ui.editor.syntaxcoloring.HighlightingConfiguration;
@@ -28,6 +31,7 @@ import com.google.eclipse.protobuf.ui.outline.LinkWithEditor;
 import com.google.eclipse.protobuf.ui.outline.ProtobufOutlinePage;
 import com.google.eclipse.protobuf.ui.parser.PreferenceDrivenProtobufParser;
 import com.google.eclipse.protobuf.ui.preferences.compiler.CompilerPreferences;
+import com.google.eclipse.protobuf.ui.preferences.editor.general.EditorPreferences;
 import com.google.eclipse.protobuf.ui.preferences.editor.ignore.IgnoredExtensionsPreferences;
 import com.google.eclipse.protobuf.ui.preferences.editor.numerictag.NumericTagPreferences;
 import com.google.eclipse.protobuf.ui.preferences.editor.save.SaveActionsPreferences;
@@ -43,6 +47,7 @@ import org.eclipse.jface.text.hyperlink.IHyperlinkDetector;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.eclipse.ui.views.contentoutline.IContentOutlinePage;
 import org.eclipse.xtext.documentation.IEObjectDocumentationProvider;
+import org.eclipse.xtext.formatting.IIndentationInformation;
 import org.eclipse.xtext.ide.editor.syntaxcoloring.ISemanticHighlightingCalculator;
 import org.eclipse.xtext.parser.IParser;
 import org.eclipse.xtext.resource.IResourceServiceProvider;
@@ -141,6 +146,7 @@ public class ProtobufUiModule extends AbstractProtobufUiModule {
     configurePreferenceInitializer(binder, "numericTagPreferences", NumericTagPreferences.Initializer.class);
     configurePreferenceInitializer(binder, "miscellaneousPreferences", MiscellaneousPreferences.Initializer.class);
     configurePreferenceInitializer(binder, "pathsPreferences", PathsPreferences.Initializer.class);
+    configurePreferenceInitializer(binder, "editorPreferences", EditorPreferences.Initializer.class);
     configurePreferenceInitializer(binder, "saveActionsPreferences", SaveActionsPreferences.Initializer.class);
   }
 
@@ -157,5 +163,14 @@ public class ProtobufUiModule extends AbstractProtobufUiModule {
 
   public Class<? extends AbstractAntlrTokenToAttributeIdMapper> bindAbstractAntlrTokenToAttributeIdMapper() {
     return ProtobufAntlrTokenToAttributeIdMapper.class;
+  }
+  
+  @Override
+  public Class<? extends IIndentationInformation> bindIIndentationInformation() {
+	return CustomPreferenceStoreIndentationInformation.class;
+  }
+  
+  public Class<? extends IMaximumLineWidthProvider> bindIMaximumLineWidthProvider() {
+	  return EditorMaximumLineWidthProvider.class;
   }
 }

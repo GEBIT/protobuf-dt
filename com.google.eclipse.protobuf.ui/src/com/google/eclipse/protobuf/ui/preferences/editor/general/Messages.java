@@ -16,6 +16,8 @@ import org.eclipse.osgi.util.NLS;
  */
 public class Messages extends NLS {
   public static String header;
+  public static String insertSpacesForTabs;
+  public static String maximumLineWidth;
 
   static {
     // initialize resource bundle
