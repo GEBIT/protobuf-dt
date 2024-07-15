@@ -115,7 +115,7 @@ Enum:
   '}' ';'?;
 
 EnumElement:
-  Option | Literal;
+  Option | Literal | Reserved;
 
 Literal:
   name=Name '=' index=(LONG | HEX)
