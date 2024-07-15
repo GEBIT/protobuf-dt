@@ -115,7 +115,7 @@ Enum:
   '}' ';'?;
 
 EnumElement:
-  Option | Literal | Reserved;
+  Option | Literal | ReservedEnum;
 
 Literal:
   name=Name '=' index=(LONG | HEX)
@@ -136,6 +136,10 @@ ExtensibleType:
   Message | Group;
 
 Reserved:
+  'reserved' reservations+=Reservation (',' reservations+=Reservation)* ';'+;
+
+// quick hack so that reservations of enums embedded in messages does not interfere
+ReservedEnum:
   'reserved' reservations+=Reservation (',' reservations+=Reservation)* ';'+;
 
 Reservation:
