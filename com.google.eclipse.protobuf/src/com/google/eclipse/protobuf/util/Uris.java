@@ -15,11 +15,20 @@ import static com.google.common.collect.Lists.newArrayList;
 import static com.google.eclipse.protobuf.util.Workspaces.workspaceRoot;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspaceRoot;
+import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.emf.common.util.URI;
@@ -56,6 +65,9 @@ import com.google.inject.Singleton;
     }
     if (uri.isPlatformResource()) {
       return referredFileExists(uri);
+    }
+    if (uri.isArchive()) {
+      return referredFileInArchiveExists(uri);
     }
     return false;
   }
@@ -134,5 +146,55 @@ import com.google.inject.Singleton;
   private IPath pathOf(URI uri) {
     String platformString = uri.toPlatformString(true);
     return platformString != null ? Path.fromOSString(platformString) : null;
+  }
+  
+  public boolean referredFileInArchiveExists(URI uri) {
+	  String authority = uri.authority();
+	  if (authority == null) {
+		  return false;
+	  }
+	  if (authority.endsWith("!")) {
+		  authority = authority.substring(0, authority.length() - 1);
+	  }
+	  if (authority.startsWith("file:")) {
+		  authority = authority.substring(5);
+	  }
+	  if (authority.startsWith("platform:/resource")) {
+		  authority = authority.substring(18);
+		  IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
+		  IResource res = root.findMember(authority);
+		  if (res != null) {
+			  authority = res.getLocation().toOSString();
+		  }
+	  }
+	  
+	  String pathToSearch = uri.path();
+	  if (pathToSearch.startsWith("/")) {
+		  // Zip entries don't have a slash in the beginning
+		  pathToSearch = pathToSearch.substring(1);
+	  }
+	  ZipInputStream zip = null;
+	  try {
+		  zip = new ZipInputStream(Files.newInputStream(Paths.get(authority), StandardOpenOption.READ));
+		  ZipEntry entry = zip.getNextEntry();
+		  while(entry != null) {
+			  if (entry.getName().equals(pathToSearch)) {
+				  return true;
+			  }
+			  entry = zip.getNextEntry();
+		  }
+	  } catch(IOException e) {
+		  return false;
+	  } finally {
+		try {
+		  if(zip != null) {	  
+			  zip.close();
+		  }
+		} catch (IOException e2) {
+			// ignored
+		}
+	  }
+	  
+	  return false;
   }
 }

@@ -57,4 +57,14 @@ class MultipleDirectoriesUriResolver {
     }
     return null;
   }
+  
+  public String resolveUriFromPaths(final String importUri, Iterable<DirectoryPath> paths) {
+	  for (DirectoryPath path : paths) {
+		  String uri = uriResolver.resolveUri(importUri, path);
+	      if (uri != null) {
+	    	  return uri;
+	      }
+	  }
+	  return null;
+  }
 }

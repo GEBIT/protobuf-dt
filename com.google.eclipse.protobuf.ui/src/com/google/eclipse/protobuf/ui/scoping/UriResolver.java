@@ -13,12 +13,23 @@ import static java.util.Collections.unmodifiableList;
 
 import com.google.common.collect.ImmutableList;
 import com.google.eclipse.protobuf.scoping.IUriResolver;
+import com.google.eclipse.protobuf.ui.preferences.paths.DirectoryPath;
 import com.google.eclipse.protobuf.ui.preferences.paths.PathsPreferences;
 import com.google.inject.Inject;
 
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspaceRoot;
+import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IPath;
 import org.eclipse.emf.common.util.URI;
+import org.eclipse.jdt.core.IClasspathEntry;
+import org.eclipse.jdt.core.IJavaProject;
+import org.eclipse.jdt.core.IPackageFragmentRoot;
+import org.eclipse.jdt.core.JavaCore;
+import org.eclipse.jdt.core.JavaModelException;
+import org.eclipse.jdt.internal.core.JavaProject;
 import org.eclipse.xtext.ui.XtextProjectHelper;
 import org.eclipse.xtext.ui.editor.preferences.IPreferenceStoreAccess;
 
@@ -35,18 +46,91 @@ public class UriResolver implements IUriResolver {
 
   @Override
   public String resolveUri(String importUri, URI declaringResourceUri, IProject project) {
-    return resolveUriInternal(importUri, declaringResourceUri, project);
+    return resolveUriInternal(importUri, declaringResourceUri, project, false);
   }
 
-  private String resolveUriInternal(String importUri, URI declaringResourceUri, IProject project) {
+  private String resolveUriInternal(String importUri, URI declaringResourceUri, IProject project, boolean recursive) {
     if (project == null) {
       return multipleDirectories.resolveUri(importUri, preferencesFromAllProjects());
     }
     PathsPreferences locations = new PathsPreferences(storeAccess, project);
+    String resolvedUri = null;
     if (locations.areFilesInMultipleDirectories()) {
-      return multipleDirectories.resolveUri(importUri, ImmutableList.of(locations));
+      resolvedUri = multipleDirectories.resolveUri(importUri, ImmutableList.of(locations));
+    } else {
+      if (recursive) {
+    	  // In case of recursive dependency resolution without explicitly configured directories from a Java
+    	  // project, try to add all source directories to the search path list, because that's the best we can do
+    	  if (project.isOpen() && JavaProject.hasJavaNature(project)) {
+    		  ArrayList<DirectoryPath> paths = new ArrayList<>();
+    		  try {
+	    		  IJavaProject javaProject = JavaCore.create(project);
+	    		  for (IPackageFragmentRoot packageFragmentRoot : javaProject.getAllPackageFragmentRoots()) {
+	    			  if (packageFragmentRoot.getKind() == IPackageFragmentRoot.K_SOURCE) {
+	    				  paths.add(DirectoryPath.parse("${workspace_loc:" + packageFragmentRoot.getPath().toOSString() + "}", project));
+	    			  }
+	    		  }
+    		  } catch(JavaModelException e) {
+    			  // ignored
+    		  }
+    		  
+    		  resolvedUri = multipleDirectories.resolveUriFromPaths(importUri, paths);
+    	  }
+      } else {
+    	  resolvedUri = singleDirectory.resolveUri(importUri, declaringResourceUri);
+      }
     }
-    return singleDirectory.resolveUri(importUri, declaringResourceUri);
+    if (resolvedUri != null) {
+      return resolvedUri;
+    }
+	
+	try {
+		// Try to resolve in the dependencies. First search referenced projects.
+		for (IProject refProject : project.getReferencedProjects()) {
+			resolvedUri = resolveUriInternal(importUri, declaringResourceUri, refProject, true);
+			if (resolvedUri != null) {
+		      return resolvedUri;
+			}
+		}
+		
+		// Then search referenced jar dependencies, in case it's a Java project
+		if (project.isOpen() && JavaProject.hasJavaNature(project)) {
+  		  ArrayList<DirectoryPath> paths = new ArrayList<>();
+  		  try {
+	    		  IJavaProject javaProject = JavaCore.create(project);
+	    		  for (IClasspathEntry classpathEntry : javaProject.getRawClasspath()) {
+	    			  if (classpathEntry.getContentKind() == IPackageFragmentRoot.K_BINARY) {
+	    				  if (classpathEntry.getPath().toOSString().toLowerCase().endsWith(".jar")) {
+	    					  IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
+
+	    					  if (classpathEntry.getEntryKind() == IClasspathEntry.CPE_LIBRARY) {
+	    					      IPath cpPath = classpathEntry.getPath();
+	    					      IResource res = root.findMember(cpPath);
+	    					      // If res is null, the path is absolute (it's an external jar)
+	    					      String path;
+	    					      if (res == null) {
+	    					          path = cpPath.toOSString();
+	    					      } else {
+	    					          path = res.getFullPath().toOSString();
+	    					      }
+	    					      paths.add(DirectoryPath.parse(path, project));
+	    					  }
+	    				  }
+	    			  }
+	    		  }
+  		  } catch(JavaModelException e) {
+  			  // ignored
+  		  }
+  		  
+  		  resolvedUri = multipleDirectories.resolveUriFromPaths(importUri, paths);
+  		  if (resolvedUri != null) {
+		      return resolvedUri;
+  		  }
+  	  }
+	} catch (CoreException e) {
+		throw new RuntimeException(e);
+	}
+	return null;
   }
 
   private Iterable<PathsPreferences> preferencesFromAllProjects() {

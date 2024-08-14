@@ -50,7 +50,12 @@ import com.google.inject.Singleton;
   }
 
   private URI resolveFileUri(String importUri, String importRootPath) {
-    String resolvedImportRootPath = pathResolver.resolvePath(importRootPath);
+	if (importRootPath.endsWith(".jar")) {
+	    // Special case of a file URI from within a jar in the workspace
+		return URI.createURI("archive:platform:/resource" + importRootPath + "!/" + importUri);		
+	}
+	
+	String resolvedImportRootPath = pathResolver.resolvePath(importRootPath);
     if (isEmpty(resolvedImportRootPath)) {
       return null;
     }
