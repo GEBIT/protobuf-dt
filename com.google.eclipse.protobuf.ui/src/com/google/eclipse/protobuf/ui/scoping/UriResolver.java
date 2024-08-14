@@ -111,7 +111,7 @@ public class UriResolver implements IUriResolver {
 	    					      if (res == null) {
 	    					          path = cpPath.toOSString();
 	    					      } else {
-	    					          path = res.getFullPath().toOSString();
+	    					          path = "${workspace_loc:" + res.getFullPath().toOSString() + "}";
 	    					      }
 	    					      paths.add(DirectoryPath.parse(path, project));
 	    					  }

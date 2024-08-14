@@ -39,6 +39,10 @@ import com.google.inject.Singleton;
 
   private URI resolveUri(String importUri, String importRootPath, boolean isWorkspacePath) {
     if (isWorkspacePath) {
+      if (importRootPath.endsWith(".jar")) {
+    	// Special case of a file URI from within a jar in the workspace
+  		return URI.createURI("archive:platform:/resource" + importRootPath + "!/" + importUri);
+      }
       return resolvePlatformResourceUri(importUri, importRootPath);
     }
     return resolveFileUri(importUri, importRootPath);
@@ -51,8 +55,8 @@ import com.google.inject.Singleton;
 
   private URI resolveFileUri(String importUri, String importRootPath) {
 	if (importRootPath.endsWith(".jar")) {
-	    // Special case of a file URI from within a jar in the workspace
-		return URI.createURI("archive:platform:/resource" + importRootPath + "!/" + importUri);		
+	    // Special case of a file URI from within a jar outside of the workspace
+		return URI.createURI("archive:file:" + importRootPath + "!/" + importUri);		
 	}
 	
 	String resolvedImportRootPath = pathResolver.resolvePath(importRootPath);
