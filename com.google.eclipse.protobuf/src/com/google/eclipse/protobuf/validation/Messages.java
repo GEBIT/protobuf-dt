@@ -14,9 +14,12 @@ import org.eclipse.osgi.util.NLS;
  * @author alruiz@google.com (Alex Ruiz)
  */
 public class Messages extends NLS {
+  public static String duplicateNameConflict;
   public static String conflictingExtensions;
   public static String conflictingField;
+  public static String conflictingValue;
   public static String conflictingGroup;
+  public static String conflictingDuplicateName;
   public static String conflictingReservedName;
   public static String conflictingReservedNumber;
   public static String expectedFieldName;

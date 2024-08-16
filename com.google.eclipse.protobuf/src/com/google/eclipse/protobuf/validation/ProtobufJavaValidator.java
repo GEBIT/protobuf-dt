@@ -13,6 +13,8 @@ import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.MAP_
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.MESSAGE_FIELD__MODIFIER;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.PACKAGE__IMPORTED_NAMESPACE;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.SYNTAX__NAME;
+import static com.google.eclipse.protobuf.validation.Messages.duplicateNameConflict;
+import static com.google.eclipse.protobuf.validation.Messages.conflictingDuplicateName;
 import static com.google.eclipse.protobuf.validation.Messages.expectedFieldNumber;
 import static com.google.eclipse.protobuf.validation.Messages.expectedSyntaxIdentifier;
 import static com.google.eclipse.protobuf.validation.Messages.fieldNumbersMustBePositive;
@@ -33,6 +35,7 @@ import static com.google.eclipse.protobuf.validation.Messages.tagNumberRangeConf
 import static com.google.eclipse.protobuf.validation.Messages.tagNumberConflict;
 import static com.google.eclipse.protobuf.validation.Messages.conflictingExtensions;
 import static com.google.eclipse.protobuf.validation.Messages.conflictingField;
+import static com.google.eclipse.protobuf.validation.Messages.conflictingValue;
 import static com.google.eclipse.protobuf.validation.Messages.conflictingGroup;
 import static com.google.eclipse.protobuf.validation.Messages.conflictingReservedName;
 import static com.google.eclipse.protobuf.validation.Messages.conflictingReservedNumber;
@@ -45,6 +48,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.LinkedHashMultimap;
@@ -53,14 +57,17 @@ import com.google.common.collect.Range;
 import com.google.eclipse.protobuf.model.util.IndexRanges;
 import com.google.eclipse.protobuf.model.util.IndexRanges.BackwardsRangeException;
 import com.google.eclipse.protobuf.model.util.IndexedElements;
+import com.google.eclipse.protobuf.model.util.Literals;
 import com.google.eclipse.protobuf.model.util.Protobufs;
 import com.google.eclipse.protobuf.model.util.StringLiterals;
 import com.google.eclipse.protobuf.model.util.Syntaxes;
 import com.google.eclipse.protobuf.naming.NameResolver;
+import com.google.eclipse.protobuf.protobuf.EnumElement;
 import com.google.eclipse.protobuf.protobuf.Extensions;
 import com.google.eclipse.protobuf.protobuf.Group;
 import com.google.eclipse.protobuf.protobuf.IndexRange;
 import com.google.eclipse.protobuf.protobuf.IndexedElement;
+import com.google.eclipse.protobuf.protobuf.Literal;
 import com.google.eclipse.protobuf.protobuf.MapType;
 import com.google.eclipse.protobuf.protobuf.MapTypeLink;
 import com.google.eclipse.protobuf.protobuf.Message;
@@ -73,6 +80,7 @@ import com.google.eclipse.protobuf.protobuf.ProtobufElement;
 import com.google.eclipse.protobuf.protobuf.ProtobufPackage;
 import com.google.eclipse.protobuf.protobuf.Reservation;
 import com.google.eclipse.protobuf.protobuf.Reserved;
+import com.google.eclipse.protobuf.protobuf.ReservedEnum;
 import com.google.eclipse.protobuf.protobuf.ScalarType;
 import com.google.eclipse.protobuf.protobuf.ScalarTypeLink;
 import com.google.eclipse.protobuf.protobuf.StringLiteral;
@@ -109,6 +117,7 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
   @Inject private IndexRanges indexRanges;
   @Inject private NameResolver nameResolver;
   @Inject private StringLiterals stringLiterals;
+  @Inject private Literals literals;
   @Inject private Protobufs protobufs;
   @Inject private Syntaxes syntaxes;
 
@@ -176,6 +185,30 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
       rangeUsages.put(element, range);
     }
   }
+  
+  @Check public void checkForIndexConflicts(com.google.eclipse.protobuf.protobuf.Enum enumeration) {
+	  	Multimap<EObject, Range<Long>> rangeUsages = LinkedHashMultimap.create();
+	  	
+	  	for (ReservedEnum reserved : getOwnedElements(enumeration, ReservedEnum.class)) {
+	        for (IndexRange indexRange : Iterables.filter(reserved.getReservations(), IndexRange.class)) {
+	          try {
+	            Range<Long> range = indexRanges.toLongRange(indexRange);
+	            errorOnConflicts(range, rangeUsages, indexRange, null);
+	            rangeUsages.put(reserved, range);
+	          } catch (BackwardsRangeException e) {
+	            // Do not try to find conflicts with invalid ranges.
+	          }
+	        }
+	    }
+	  	
+	    for (Literal literal : getOwnedElements(enumeration, Literal.class)) {
+	      long index = literal.getIndex();
+	      Range<Long> range = Range.singleton(index);
+	      EStructuralFeature feature = literals.indexFeatureOf(literal);
+	      errorOnConflicts(range, rangeUsages, literal, feature);
+	      rangeUsages.put(literal, range);
+	    }
+  }
 
   private void errorOnConflicts(
       Range<Long> range,
@@ -196,10 +229,15 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
         if (rangeUser instanceof MessageField) {
           rangeUserString =
               String.format(conflictingField, nameResolver.nameOf(rangeUser), usedRangeString);
+        } else if (rangeUser instanceof Literal) {
+          rangeUserString =
+              String.format(conflictingValue, nameResolver.nameOf(rangeUser), usedRangeString);
         } else if (rangeUser instanceof Group) {
           rangeUserString =
               String.format(conflictingGroup, nameResolver.nameOf(rangeUser), usedRangeString);
         } else if (rangeUser instanceof Reserved) {
+          rangeUserString = String.format(conflictingReservedNumber, usedRangeString);
+        } else if (rangeUser instanceof ReservedEnum) {
           rangeUserString = String.format(conflictingReservedNumber, usedRangeString);
         } else {
           rangeUserString = String.format(conflictingExtensions, usedRangeString);
@@ -253,6 +291,50 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
       }
     }
   }
+  
+  @Check public void checkForReservedNameConflicts(com.google.eclipse.protobuf.protobuf.Enum anEnum) {
+    Set<String> reservedNames = new HashSet<>();
+    for (ReservedEnum reserved : getOwnedElements(anEnum, ReservedEnum.class)) {
+      for (StringLiteral stringLiteral :
+          Iterables.filter(reserved.getReservations(), StringLiteral.class)) {
+        String name = stringLiterals.getCombinedString(stringLiteral);
+        reportReservedNameConflicts(name, reservedNames, stringLiteral, null);
+        reservedNames.add(name);
+      }
+    }
+
+    for (Literal literal : getOwnedElements(anEnum, Literal.class)) {
+      String name = nameResolver.nameOf(literal);
+      if (name != null) {
+        EAttribute nameAttribute = SimpleAttributeResolver.NAME_RESOLVER.getAttribute(literal);
+        reportReservedNameConflicts(name, reservedNames, literal, nameAttribute);
+      }
+    }
+  }
+  
+  @Check public void checkForDuplicateFieldNames(Message aMessage) {
+	  Collection<MessageField> fields = getOwnedElements(aMessage, MessageField.class);
+	  for (MessageField field : fields) {
+		  for (MessageField otherField : fields) {
+			  if(otherField != field && otherField.getName().equals(field.getName())) {
+				  EAttribute nameAttribute = SimpleAttributeResolver.NAME_RESOLVER.getAttribute(field);
+				  reportDuplicateNameConflicts(field.getName(), field, nameAttribute);
+			  }
+		  }
+	  }
+  }
+  
+  @Check public void checkForDuplicateValues(com.google.eclipse.protobuf.protobuf.Enum anEnum) {
+	  Collection<Literal> allLiterals = getOwnedElements(anEnum, Literal.class);
+	  for (Literal literal : allLiterals) {
+		  for (Literal otherLiteral : allLiterals) {
+			  if(otherLiteral != literal && otherLiteral.getName().equals(literal.getName())) {
+				  EAttribute nameAttribute = SimpleAttributeResolver.NAME_RESOLVER.getAttribute(literal);
+				  reportDuplicateNameConflicts(literal.getName(), literal, nameAttribute);
+			  }
+		  }
+	  }
+  }
 
   @Check public void checkForReservedIndexAndName(Reserved reserved) {
     boolean hasIndexReservation = false;
@@ -278,13 +360,19 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
       error(message, errorSource, errorFeature);
     }
   }
+  
+  private void reportDuplicateNameConflicts(String name, EObject errorSource, EAttribute errorFeature) {
+      String nameUser = String.format(conflictingDuplicateName, name);
+      String message = String.format(duplicateNameConflict, name, nameUser);
+      error(message, errorSource, errorFeature);
+  }
 
   /**
    * Returns elements of the given type contained within the given message, except those contained
    * within intervening Messages or TypeExtensions.
    */
   private static <E extends EObject> Collection<E> getOwnedElements(
-      Message container, Class<E> elementType) {
+      EObject container, Class<E> elementType) {
     Collection<E> elements = new ArrayList<E>();
 
     TreeIterator<EObject> elementsIterator = container.eAllContents();
