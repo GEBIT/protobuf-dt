@@ -69,6 +69,7 @@ public class ProtobufFormatter extends AbstractDeclarativeFormatter {
     c.setLinewrap(1,2,3).before(g.getMessageRule());
     c.setLinewrap(2).after(g.getMessageRule());
     c.setLinewrap(1).after(g.getMessageFieldRule());
+    c.setLinewrap(2).after(g.getOneOfRule());
     c.setLinewrap(1).after(g.getGroupRule());
     c.setLinewrap(2).after(g.getEnumRule());
     c.setLinewrap(1).after(g.getEnumElementRule());
@@ -135,6 +136,8 @@ public class ProtobufFormatter extends AbstractDeclarativeFormatter {
 				
 		ProtobufGrammarAccess g = (ProtobufGrammarAccess) getGrammarAccess();
 		openingCurlyBracketRuleCalls.add(g.getMessageAccess().getLeftCurlyBracketKeyword_2());
+		openingCurlyBracketRuleCalls.add(g.getOneOfAccess().getLeftCurlyBracketKeyword_3()); 
+		
 		slCommentType = g.getSL_COMMENTRule().getType();
 	}
 
