@@ -2,7 +2,7 @@
 <feature
       id="de.gebit.eclipse.protobuf.feature"
       label="%featureName"
-      version="2.6.0.qualifier"
+      version="2.6.1.qualifier"
       provider-name="%providerName">
 
    <description url="https://github.com/GEBIT/protobuf-dt">
