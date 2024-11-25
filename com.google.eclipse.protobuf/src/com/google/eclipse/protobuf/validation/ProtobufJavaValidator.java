@@ -62,6 +62,7 @@ import com.google.eclipse.protobuf.model.util.Protobufs;
 import com.google.eclipse.protobuf.model.util.StringLiterals;
 import com.google.eclipse.protobuf.model.util.Syntaxes;
 import com.google.eclipse.protobuf.naming.NameResolver;
+import com.google.eclipse.protobuf.protobuf.BooleanLink;
 import com.google.eclipse.protobuf.protobuf.EnumElement;
 import com.google.eclipse.protobuf.protobuf.Extensions;
 import com.google.eclipse.protobuf.protobuf.Group;
@@ -74,6 +75,7 @@ import com.google.eclipse.protobuf.protobuf.Message;
 import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.eclipse.protobuf.protobuf.ModifierEnum;
 import com.google.eclipse.protobuf.protobuf.OneOf;
+import com.google.eclipse.protobuf.protobuf.Option;
 import com.google.eclipse.protobuf.protobuf.Package;
 import com.google.eclipse.protobuf.protobuf.Protobuf;
 import com.google.eclipse.protobuf.protobuf.ProtobufElement;
@@ -187,20 +189,27 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
   }
   
   @Check public void checkForIndexConflicts(com.google.eclipse.protobuf.protobuf.Enum enumeration) {
-	  	Multimap<EObject, Range<Long>> rangeUsages = LinkedHashMultimap.create();
-	  	
-	  	for (ReservedEnum reserved : getOwnedElements(enumeration, ReservedEnum.class)) {
-	        for (IndexRange indexRange : Iterables.filter(reserved.getReservations(), IndexRange.class)) {
-	          try {
-	            Range<Long> range = indexRanges.toLongRange(indexRange);
-	            errorOnConflicts(range, rangeUsages, indexRange, null);
-	            rangeUsages.put(reserved, range);
-	          } catch (BackwardsRangeException e) {
-	            // Do not try to find conflicts with invalid ranges.
-	          }
-	        }
-	    }
-	  	
+    final boolean allowAliasOption = getOwnedElements(enumeration, Option.class).stream().filter(
+    		(anOption) -> "allow_alias".equals(nameResolver.nameOf(anOption.getSource().getTarget()))).findFirst()
+    			.map(anOption -> ((BooleanLink) anOption.getValue()).getTarget())
+    			.map(aBool -> "true".equals(aBool.getLiteral()))
+    			.orElse(false);
+    
+  	Multimap<EObject, Range<Long>> rangeUsages = LinkedHashMultimap.create();
+  	
+  	for (ReservedEnum reserved : getOwnedElements(enumeration, ReservedEnum.class)) {
+        for (IndexRange indexRange : Iterables.filter(reserved.getReservations(), IndexRange.class)) {
+          try {
+            Range<Long> range = indexRanges.toLongRange(indexRange);
+            errorOnConflicts(range, rangeUsages, indexRange, null);
+            rangeUsages.put(reserved, range);
+          } catch (BackwardsRangeException e) {
+            // Do not try to find conflicts with invalid ranges.
+          }
+        }
+    }
+  	
+  	if(!allowAliasOption) {
 	    for (Literal literal : getOwnedElements(enumeration, Literal.class)) {
 	      long index = literal.getIndex();
 	      Range<Long> range = Range.singleton(index);
@@ -208,6 +217,7 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
 	      errorOnConflicts(range, rangeUsages, literal, feature);
 	      rangeUsages.put(literal, range);
 	    }
+  	}
   }
 
   private void errorOnConflicts(
