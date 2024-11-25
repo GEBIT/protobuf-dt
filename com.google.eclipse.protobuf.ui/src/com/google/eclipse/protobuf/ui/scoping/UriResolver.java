@@ -11,12 +11,20 @@ package com.google.eclipse.protobuf.ui.scoping;
 import static com.google.eclipse.protobuf.util.Workspaces.workspaceRoot;
 import static java.util.Collections.unmodifiableList;
 
+import java.lang.reflect.InvocationTargetException;
+
 import com.google.common.collect.ImmutableList;
 import com.google.eclipse.protobuf.scoping.IUriResolver;
 import com.google.eclipse.protobuf.ui.preferences.paths.DirectoryPath;
 import com.google.eclipse.protobuf.ui.preferences.paths.PathsPreferences;
 import com.google.inject.Inject;
 
+import org.apache.maven.Maven;
+import org.apache.maven.artifact.Artifact;
+import org.apache.maven.execution.MavenExecutionResult;
+import org.apache.maven.model.Dependency;
+import org.apache.maven.project.MavenProject;
+import org.apache.maven.project.ProjectBuildingRequest;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspaceRoot;
@@ -31,11 +39,21 @@ import org.eclipse.jdt.core.IPackageFragmentRoot;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jdt.internal.core.JavaProject;
+import org.eclipse.m2e.core.MavenPlugin;
+import org.eclipse.m2e.core.embedder.IMavenExecutionContext;
+import org.eclipse.m2e.core.internal.IMavenConstants;
+import org.eclipse.m2e.core.internal.project.registry.DefaultMavenDependencyResolver;
+import org.eclipse.m2e.core.internal.project.registry.MavenRequiredCapability;
+import org.eclipse.m2e.core.internal.project.registry.ProjectRegistryManager;
+import org.eclipse.m2e.core.internal.project.registry.RequiredCapability;
+import org.eclipse.m2e.core.project.IMavenProjectFacade;
 import org.eclipse.xtext.ui.XtextProjectHelper;
 import org.eclipse.xtext.ui.editor.preferences.IPreferenceStoreAccess;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -144,7 +162,18 @@ public class UriResolver implements IUriResolver {
 		      return resolvedUri;
   		  }
   	  }
-	} catch (CoreException e) {
+		
+	  try {	  
+		  List<DirectoryPath> paths = MavenResolverHelper.resolveMavenDependencies(project);		  
+		  
+		  resolvedUri = multipleDirectories.resolveUriFromPaths(importUri, paths);
+  		  if (resolvedUri != null) {
+		      return resolvedUri;
+  		  }
+	  } catch(NoClassDefFoundError exc) {
+		  // this is basically expected if m2e is not installed at all. Maven resolution is optional.
+	  }
+	} catch (CoreException | IllegalArgumentException | SecurityException e) {
 		throw new RuntimeException(e);
 	}
 	return null;
