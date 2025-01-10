@@ -56,7 +56,10 @@ import com.google.inject.Singleton;
   private URI resolveFileUri(String importUri, String importRootPath) {
 	if (importRootPath.endsWith(".jar")) {
 	    // Special case of a file URI from within a jar outside of the workspace
-		return URI.createURI("archive:file:" + importRootPath + "!/" + importUri);		
+		return URI.createURI("archive:file:" 
+				+ (importRootPath.startsWith("/") ? "" : "///") // Windows paths need /// in the beginning
+				+ importRootPath.replaceAll("\\\\", "/") // Convert Windows dividers to the real ones
+				+ "!/" + importUri);
 	}
 	
 	String resolvedImportRootPath = pathResolver.resolvePath(importRootPath);

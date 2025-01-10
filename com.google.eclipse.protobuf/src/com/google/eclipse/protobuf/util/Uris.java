@@ -167,6 +167,10 @@ import com.google.inject.Singleton;
 			  authority = res.getLocation().toOSString();
 		  }
 	  }
+	  if (authority.startsWith("///")) {
+		  // For the Paths API the starting triple slashes must be removed, if there are any (sometimes on windows)
+		  authority = authority.substring(3);
+	  }
 	  
 	  String pathToSearch = uri.path();
 	  if (pathToSearch.startsWith("/")) {
