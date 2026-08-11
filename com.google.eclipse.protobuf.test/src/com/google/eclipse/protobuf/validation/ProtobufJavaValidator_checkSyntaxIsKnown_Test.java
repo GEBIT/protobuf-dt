@@ -47,11 +47,11 @@ public class ProtobufJavaValidator_checkSyntaxIsKnown_Test {
     validator.setMessageAcceptor(messageAcceptor);
   }
 
-  @Test public void should_create_error_if_syntax_is_not_proto2_or_proto3() {
+  @Test public void should_create_error_if_syntax_or_edition_is_unknown() {
     when(syntax.getName()).thenReturn(createLiteralOf("proto5"));
     validator.checkSyntaxIsKnown(syntax);
-    String message = "Unrecognized syntax identifier \"proto5\".  "
-        + "This parser only recognizes \"proto2\" and \"proto3\".";
+    String message = "Unrecognized syntax or edition identifier \"proto5\".  "
+        + "This parser recognizes \"proto2\", \"proto3\", and editions \"2023\" and \"2024\".";
     verify(messageAcceptor).acceptError(message, syntax, SYNTAX__NAME, INSIGNIFICANT_INDEX,
         SYNTAX_IS_NOT_KNOWN_ERROR);
   }
@@ -66,6 +66,20 @@ public class ProtobufJavaValidator_checkSyntaxIsKnown_Test {
     when(syntax.getName()).thenReturn(createLiteralOf("proto3"));
     validator.checkSyntaxIsKnown(syntax);
     verifyNoInteractions(messageAcceptor);
+  }
+
+  @Test public void should_not_create_error_if_edition_is_2023() {
+    when(syntax.getName()).thenReturn(createLiteralOf("2023"));
+    when(syntax.isEdition()).thenReturn(true);
+    validator.checkSyntaxIsKnown(syntax);
+    verifyZeroInteractions(messageAcceptor);
+  }
+
+  @Test public void should_not_create_error_if_edition_is_2024() {
+    when(syntax.getName()).thenReturn(createLiteralOf("2024"));
+    when(syntax.isEdition()).thenReturn(true);
+    validator.checkSyntaxIsKnown(syntax);
+    verifyZeroInteractions(messageAcceptor);
   }
 
   private static StringLiteral createLiteralOf(String s) {

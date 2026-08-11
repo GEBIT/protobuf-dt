@@ -18,7 +18,7 @@ Protobuf:
   (elements+=ProtobufElement)*;
 
 Syntax:
-  'syntax' '=' name=StringLiteral (';')+;
+  ('syntax' | edition?='edition') '=' name=StringLiteral (';')+;
 
 ProtobufElement:
   Package | Import | Option | ComplexType | TypeExtension | Service;
@@ -290,6 +290,7 @@ SafeReservedWord:
   'returns' |
   'rpc' |
   'service' |
+  'edition' |
   'sfixed32' |
   'sfixed64' |
   'sint32' |

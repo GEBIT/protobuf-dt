@@ -21,6 +21,8 @@ import com.google.inject.Singleton;
 @Singleton public final class Syntaxes {
   public static final String PROTO2 = "proto2";
   public static final String PROTO3 = "proto3";
+  public static final String EDITION_2023 = "2023";
+  public static final String EDITION_2024 = "2024";
 
   @Inject
   private StringLiterals stringLiterals;
@@ -40,7 +42,7 @@ import com.google.inject.Singleton;
    * @return {@code true} if the given {@code Syntax} specifies "proto2," {@code false} otherwise.
    */
   public boolean isSpecifyingProto2Syntax(Syntax s) {
-    return PROTO2.equals(getName(s));
+    return s != null && !s.isEdition() && PROTO2.equals(getName(s));
   }
 
   /**
@@ -58,7 +60,19 @@ import com.google.inject.Singleton;
    * @return {@code true} if the given {@code Syntax} specifies "proto3," {@code false} otherwise.
    */
   public boolean isSpecifyingProto3Syntax(Syntax s) {
-    return PROTO3.equals(getName(s));
+    return s != null && !s.isEdition() && PROTO3.equals(getName(s));
+  }
+
+  public boolean isSpecifyingEdition2023(Syntax s) {
+    return isEdition(s, EDITION_2023);
+  }
+
+  public boolean isSpecifyingEdition2024(Syntax s) {
+    return isEdition(s, EDITION_2024);
+  }
+
+  private boolean isEdition(Syntax syntax, String edition) {
+    return syntax != null && syntax.isEdition() && edition.equals(getName(syntax));
   }
 
   /**

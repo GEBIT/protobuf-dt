@@ -130,7 +130,8 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
   }
 
   @Check public void checkSyntaxIsKnown(Syntax syntax) {
-    if (syntaxes.isSpecifyingProto2Syntax(syntax) || syntaxes.isSpecifyingProto3Syntax(syntax)) {
+    if (syntaxes.isSpecifyingProto2Syntax(syntax) || syntaxes.isSpecifyingProto3Syntax(syntax)
+        || syntaxes.isSpecifyingEdition2023(syntax) || syntaxes.isSpecifyingEdition2024(syntax)) {
       return;
     }
     String name = syntaxes.getName(syntax);

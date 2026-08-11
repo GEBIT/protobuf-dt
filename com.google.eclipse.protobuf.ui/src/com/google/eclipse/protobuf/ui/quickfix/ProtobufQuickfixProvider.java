@@ -73,6 +73,7 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
     ISemanticModification modification = new ISemanticModification() {
       @Override public void apply(EObject element, IModificationContext context) throws Exception {
         Syntax syntax = (Syntax) element;
+        syntax.setEdition(false);
         syntaxes.setName(syntax, Syntaxes.PROTO2);
       }
     };
@@ -86,11 +87,40 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
     ISemanticModification modification = new ISemanticModification() {
       @Override public void apply(EObject element, IModificationContext context) throws Exception {
         Syntax syntax = (Syntax) element;
+        syntax.setEdition(false);
         syntaxes.setName(syntax, Syntaxes.PROTO3);
       }
     };
     String description = String.format(changeValueDescription, "syntax", quote(Syntaxes.PROTO3));
     String label = String.format(changeValueLabel, Syntaxes.PROTO3);
+    acceptor.accept(issue, label, description, ICON_FOR_CHANGE, modification);
+  }
+
+  @Fix(SYNTAX_IS_NOT_KNOWN_ERROR)
+  public void changeSyntaxToEdition2023(Issue issue, IssueResolutionAcceptor acceptor) {
+    ISemanticModification modification = new ISemanticModification() {
+      @Override public void apply(EObject element, IModificationContext context) throws Exception {
+        Syntax syntax = (Syntax) element;
+        syntax.setEdition(true);
+        syntaxes.setName(syntax, Syntaxes.EDITION_2023);
+      }
+    };
+    String description = String.format(changeValueDescription, "edition", quote(Syntaxes.EDITION_2023));
+    String label = String.format(changeValueLabel, Syntaxes.EDITION_2023);
+    acceptor.accept(issue, label, description, ICON_FOR_CHANGE, modification);
+  }
+
+  @Fix(SYNTAX_IS_NOT_KNOWN_ERROR)
+  public void changeSyntaxToEdition2024(Issue issue, IssueResolutionAcceptor acceptor) {
+    ISemanticModification modification = new ISemanticModification() {
+      @Override public void apply(EObject element, IModificationContext context) throws Exception {
+        Syntax syntax = (Syntax) element;
+        syntax.setEdition(true);
+        syntaxes.setName(syntax, Syntaxes.EDITION_2024);
+      }
+    };
+    String description = String.format(changeValueDescription, "edition", quote(Syntaxes.EDITION_2024));
+    String label = String.format(changeValueLabel, Syntaxes.EDITION_2024);
     acceptor.accept(issue, label, description, ICON_FOR_CHANGE, modification);
   }
 
