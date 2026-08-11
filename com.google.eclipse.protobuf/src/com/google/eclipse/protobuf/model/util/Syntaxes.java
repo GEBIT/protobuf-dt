@@ -71,6 +71,10 @@ import com.google.inject.Singleton;
     return isEdition(s, EDITION_2024);
   }
 
+  public boolean isEdition(Syntax syntax) {
+    return syntax != null && syntax.isEdition();
+  }
+
   private boolean isEdition(Syntax syntax, String edition) {
     return syntax != null && syntax.isEdition() && edition.equals(getName(syntax));
   }

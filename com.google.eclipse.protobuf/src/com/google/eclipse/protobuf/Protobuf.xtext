@@ -30,7 +30,7 @@ PackageName:
   IdOrReservedWord ('.' IdOrReservedWord)*;
 
 Import:
-  NormalImport | PublicImport | WeakImport;
+  NormalImport | PublicImport | WeakImport | OptionImport;
 
 NormalImport:
   'import' path=StringLiteral (';')+;
@@ -41,11 +41,14 @@ PublicImport:
 WeakImport:
   'import' 'weak' path=StringLiteral (';')+;
 
+OptionImport:
+  'import' 'option' path=StringLiteral (';')+;
+
 ComplexType:
   Enum | ExtensibleType;
 
 Message:
-  ->'message' name=Name '{'
+  (isExport?='export' | isLocal?='local')? ->'message' name=Name '{'
   elements+=MessageElement*
   '}' (';')?;
 
@@ -110,7 +113,7 @@ MapType:
   ->'map' '<' keyType=TypeLink ',' valueType=TypeLink '>';
 
 Enum:
-  ->'enum' name=Name '{'
+  (isExport?='export' | isLocal?='local')? ->'enum' name=Name '{'
   elements+=EnumElement*
   '}' ';'?;
 
@@ -143,7 +146,10 @@ ReservedEnum:
   'reserved' reservations+=Reservation (',' reservations+=Reservation)* ';'+;
 
 Reservation:
-  IndexRange | StringLiteral;
+  IndexRange | StringLiteral | ReservedName;
+
+ReservedName:
+  name=Name;
 
 Service:
   ->'service' name=Name '{'
@@ -267,6 +273,7 @@ SafeReservedWord:
   'bytes' |
   'default' |
   'double' |
+  'export' |
   'enum' |
   'extend' |
   'extensions' |
@@ -277,6 +284,7 @@ SafeReservedWord:
   'import' |
   'int32' |
   'int64' |
+  'local' |
   'map' |
   'max' |
   'message' |

@@ -13,14 +13,20 @@ import static com.google.common.collect.Sets.newHashSet;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.IMPORT__PATH;
 import static com.google.eclipse.protobuf.validation.Messages.importNotFound;
 import static com.google.eclipse.protobuf.validation.Messages.importingUnsupportedSyntax;
+import static com.google.eclipse.protobuf.validation.Messages.optionImportInEdition2023;
+import static com.google.eclipse.protobuf.validation.Messages.weakImportInEdition2024;
+import static com.google.eclipse.protobuf.validation.Messages.optionImportOrder;
 import static java.lang.String.format;
 import static org.eclipse.xtext.util.Tuples.pair;
 
 import com.google.eclipse.protobuf.model.util.Imports;
 import com.google.eclipse.protobuf.model.util.Protobufs;
 import com.google.eclipse.protobuf.model.util.Resources;
+import com.google.eclipse.protobuf.model.util.Syntaxes;
 import com.google.eclipse.protobuf.protobuf.Import;
+import com.google.eclipse.protobuf.protobuf.OptionImport;
 import com.google.eclipse.protobuf.protobuf.Protobuf;
+import com.google.eclipse.protobuf.protobuf.WeakImport;
 import com.google.inject.Inject;
 
 import org.eclipse.emf.ecore.resource.Resource;
@@ -42,6 +48,7 @@ public class ImportValidator extends AbstractDeclarativeValidator {
   @Inject private Imports imports;
   @Inject private Protobufs protobufs;
   @Inject private Resources resources;
+  @Inject private Syntaxes syntaxes;
 
   @Override public void register(EValidatorRegistrar registrar) {}
 
@@ -56,9 +63,35 @@ public class ImportValidator extends AbstractDeclarativeValidator {
     if (!protobufs.hasKnownSyntax(root)) {
       return;
     }
+
     Set<Protobuf> currentlyChecking = newHashSet(root);
     HashMap<Protobuf, HasKnownSyntax> alreadyChecked = newHashMap();
     hasUnknownSyntaxImports(root, currentlyChecking, alreadyChecked);
+  }
+
+  @Check public void checkEditionImportKind(Import anImport) {
+    Protobuf root = resources.rootOf(anImport.eResource());
+    if (root == null) {
+      return;
+    }
+    if (anImport instanceof OptionImport
+        && !syntaxes.isSpecifyingEdition2024(root.getSyntax())) {
+      error(optionImportInEdition2023, anImport, IMPORT__PATH);
+    } else if (anImport instanceof WeakImport
+        && syntaxes.isSpecifyingEdition2024(root.getSyntax())) {
+      error(weakImportInEdition2024, anImport, IMPORT__PATH);
+    }
+  }
+
+  @Check public void checkOptionImportOrder(Protobuf root) {
+    boolean optionImportSeen = false;
+    for (com.google.eclipse.protobuf.protobuf.ProtobufElement element : root.getElements()) {
+      if (element instanceof OptionImport) {
+        optionImportSeen = true;
+      } else if (optionImportSeen && element instanceof Import) {
+        error(optionImportOrder, element, IMPORT__PATH);
+      }
+    }
   }
 
   private boolean hasUnknownSyntaxImports(Protobuf root, Set<Protobuf> currentlyChecking,

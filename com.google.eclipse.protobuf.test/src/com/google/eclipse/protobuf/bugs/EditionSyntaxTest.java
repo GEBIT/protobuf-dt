@@ -41,9 +41,27 @@ public class EditionSyntaxTest {
   //   string bar = 1;
   // }
   @Test public void shouldAllowEdition2024() {
-    xtext.parseText("edition = \"2024\";\nmessage Foo { string bar = 1; }");
+    xtext.parseText("edition = \"2024\";\nexport message Foo { string bar = 1; }\n"
+        + "enum Kind { reserved OLD; KIND_UNSPECIFIED = 0; }");
     assertTrue(xtext.root().getSyntax().isEdition());
     boolean isValid = validator.validate(xtext.root(), new BasicDiagnostic(), null);
     assertTrue(isValid);
+  }
+
+  @Test public void shouldRejectEditionFieldPresenceLabels() {
+    xtext.parseText("edition = \"2023\";\nmessage Foo { optional string bar = 1; }");
+    boolean isValid = validator.validate(xtext.root(), new BasicDiagnostic(), null);
+    assertTrue(!isValid);
+  }
+
+  @Test public void shouldRejectGroupsInEditions() {
+    xtext.parseText("edition = \"2023\";\nmessage Foo { group Bar = 1 { string value = 1; } }");
+    boolean isValid = validator.validate(xtext.root(), new BasicDiagnostic(), null);
+    assertTrue(!isValid);
+  }
+
+  @Test public void shouldParseEdition2024OptionImports() {
+    xtext.parseText("edition = \"2024\";\nimport option \"options.proto\";");
+    assertTrue(xtext.root().getSyntax().isEdition());
   }
 }

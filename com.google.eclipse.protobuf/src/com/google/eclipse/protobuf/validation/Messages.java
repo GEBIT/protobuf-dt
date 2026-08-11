@@ -46,6 +46,14 @@ public class Messages extends NLS {
   public static String multiplePackages;
   public static String nameConflict;
   public static String oneofFieldWithModifier;
+  public static String fieldModifierInEdition;
+  public static String groupInEdition;
+  public static String quotedReservedNameInEdition;
+  public static String visibilityInEdition2023;
+  public static String optionImportInEdition2023;
+  public static String weakImportInEdition2024;
+  public static String optionImportOrder;
+  public static String removedOptionInEdition2024;
   public static String requiredInProto3;
   public static String reservedIndexAndName;
   public static String reservedToMax;

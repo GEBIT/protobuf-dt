@@ -41,6 +41,11 @@ import static com.google.eclipse.protobuf.validation.Messages.conflictingReserve
 import static com.google.eclipse.protobuf.validation.Messages.conflictingReservedNumber;
 import static com.google.eclipse.protobuf.validation.Messages.unknownSyntax;
 import static com.google.eclipse.protobuf.validation.Messages.unrecognizedSyntaxIdentifier;
+import static com.google.eclipse.protobuf.validation.Messages.fieldModifierInEdition;
+import static com.google.eclipse.protobuf.validation.Messages.groupInEdition;
+import static com.google.eclipse.protobuf.validation.Messages.quotedReservedNameInEdition;
+import static com.google.eclipse.protobuf.validation.Messages.visibilityInEdition2023;
+import static com.google.eclipse.protobuf.validation.Messages.removedOptionInEdition2024;
 import static java.lang.String.format;
 
 import java.util.ArrayList;
@@ -74,6 +79,8 @@ import com.google.eclipse.protobuf.protobuf.MapTypeLink;
 import com.google.eclipse.protobuf.protobuf.Message;
 import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.eclipse.protobuf.protobuf.ModifierEnum;
+import com.google.eclipse.protobuf.protobuf.NativeFieldOption;
+import com.google.eclipse.protobuf.protobuf.NativeOption;
 import com.google.eclipse.protobuf.protobuf.OneOf;
 import com.google.eclipse.protobuf.protobuf.Option;
 import com.google.eclipse.protobuf.protobuf.Package;
@@ -83,6 +90,7 @@ import com.google.eclipse.protobuf.protobuf.ProtobufPackage;
 import com.google.eclipse.protobuf.protobuf.Reservation;
 import com.google.eclipse.protobuf.protobuf.Reserved;
 import com.google.eclipse.protobuf.protobuf.ReservedEnum;
+import com.google.eclipse.protobuf.protobuf.ReservedName;
 import com.google.eclipse.protobuf.protobuf.ScalarType;
 import com.google.eclipse.protobuf.protobuf.ScalarTypeLink;
 import com.google.eclipse.protobuf.protobuf.StringLiteral;
@@ -114,6 +122,11 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
   public static final String INVALID_MAP_KEY_TYPE_ERROR = "invalidMapKeyType";
   public static final String MAP_WITH_MAP_VALUE_TYPE_ERROR = "mapWithMapValueType";
   public static final String ONEOF_FIELD_WITH_MODIFIER_ERROR = "oneofFieldWithModifier";
+  public static final String FIELD_MODIFIER_IN_EDITION_ERROR = "fieldModifierInEdition";
+  public static final String GROUP_IN_EDITION_ERROR = "groupInEdition";
+  public static final String QUOTED_RESERVED_NAME_IN_EDITION_ERROR = "quotedReservedNameInEdition";
+  public static final String VISIBILITY_IN_EDITION_2023_ERROR = "visibilityInEdition2023";
+  public static final String REMOVED_OPTION_IN_EDITION_2024_ERROR = "removedOptionInEdition2024";
 
   @Inject private IndexedElements indexedElements;
   @Inject private IndexRanges indexRanges;
@@ -137,6 +150,44 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
     String name = syntaxes.getName(syntax);
     String msg = (name == null) ? expectedSyntaxIdentifier : format(unrecognizedSyntaxIdentifier, name);
     error(msg, syntax, SYNTAX__NAME, SYNTAX_IS_NOT_KNOWN_ERROR);
+  }
+
+  @Check public void checkGroupIsAllowedInEdition(Group group) {
+    if (isEditionElement(group)) {
+      error(groupInEdition, group, null, GROUP_IN_EDITION_ERROR);
+    }
+  }
+
+  @Check public void checkVisibilityIsAllowedInEdition(Message message) {
+    if (isEditionElement(message) && (message.isExport() || message.isLocal())
+        && !syntaxes.isSpecifyingEdition2024(rootOf(message).getSyntax())) {
+      error(visibilityInEdition2023, message, null, VISIBILITY_IN_EDITION_2023_ERROR);
+    }
+  }
+
+  @Check public void checkVisibilityIsAllowedInEdition(com.google.eclipse.protobuf.protobuf.Enum enumeration) {
+    if (isEditionElement(enumeration) && (enumeration.isExport() || enumeration.isLocal())
+        && !syntaxes.isSpecifyingEdition2024(rootOf(enumeration).getSyntax())) {
+      error(visibilityInEdition2023, enumeration, null, VISIBILITY_IN_EDITION_2023_ERROR);
+    }
+
+    @Check public void checkRemovedOptionInEdition2024(NativeOption option) {
+      checkRemovedOptionInEdition2024(option, nameResolver.nameOf(option.getSource().getTarget()));
+    }
+
+    @Check public void checkRemovedOptionInEdition2024(NativeFieldOption option) {
+      checkRemovedOptionInEdition2024(option, nameResolver.nameOf(option.getSource().getTarget()));
+    }
+
+    private void checkRemovedOptionInEdition2024(EObject option, String optionName) {
+      if (!isEdition2024Element(option) || optionName == null) {
+        return;
+      }
+      if ("java_multiple_files".equals(optionName) || "ctype".equals(optionName) || "weak".equals(optionName)) {
+        error(String.format(removedOptionInEdition2024, optionName), option, null,
+            REMOVED_OPTION_IN_EDITION_2024_ERROR);
+      }
+    }
   }
 
   @Check public void checkIndexRangeBounds(IndexRange indexRange) {
@@ -293,6 +344,13 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
         reservedNames.add(name);
       }
     }
+    for (Reserved reserved : getOwnedElements(message, Reserved.class)) {
+      for (ReservedName reservedName : Iterables.filter(reserved.getReservations(), ReservedName.class)) {
+        String name = reservedName.getName();
+        reportReservedNameConflicts(name, reservedNames, reservedName, null);
+        reservedNames.add(name);
+      }
+    }
 
     for (IndexedElement element : getOwnedElements(message, IndexedElement.class)) {
       String name = nameResolver.nameOf(element);
@@ -319,6 +377,13 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
       if (name != null) {
         EAttribute nameAttribute = SimpleAttributeResolver.NAME_RESOLVER.getAttribute(literal);
         reportReservedNameConflicts(name, reservedNames, literal, nameAttribute);
+      }
+    }
+    for (ReservedEnum reserved : getOwnedElements(anEnum, ReservedEnum.class)) {
+      for (ReservedName reservedName : Iterables.filter(reserved.getReservations(), ReservedName.class)) {
+        String name = reservedName.getName();
+        reportReservedNameConflicts(name, reservedNames, reservedName, null);
+        reservedNames.add(name);
       }
     }
   }
@@ -354,6 +419,8 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
       if (reservation instanceof IndexRange) {
         hasIndexReservation = true;
       } else if (reservation instanceof StringLiteral) {
+        hasNameReservation = true;
+      } else if (reservation instanceof ReservedName) {
         hasNameReservation = true;
       }
     }
@@ -413,6 +480,11 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
       checkOneOfField(field);
       return;
     }
+    if (isEditionElement(field)
+        && (field.getModifier() == ModifierEnum.OPTIONAL || field.getModifier() == ModifierEnum.REQUIRED)) {
+      error(fieldModifierInEdition, field, MESSAGE_FIELD__MODIFIER, FIELD_MODIFIER_IN_EDITION_ERROR);
+      return;
+    }
     if (field.getModifier() == ModifierEnum.UNSPECIFIED && isProto2Field(field)) {
       error(missingModifier, field, MESSAGE_FIELD__MODIFIER, MISSING_MODIFIER_ERROR);
     } else if (field.getModifier() == ModifierEnum.REQUIRED && isProto3Field(field)) {
@@ -454,6 +526,34 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
       return syntaxes.isSpecifyingProto3Syntax(((Protobuf) container).getSyntax());
     }
     return false;
+  }
+
+  private boolean isEditionElement(EObject element) {
+    Protobuf root = rootOf(element);
+    return root != null && syntaxes.isEdition(root.getSyntax());
+  }
+
+  private boolean isEdition2024Element(EObject element) {
+    Protobuf root = rootOf(element);
+    return root != null && syntaxes.isSpecifyingEdition2024(root.getSyntax());
+  }
+
+  private Protobuf rootOf(EObject element) {
+    return EcoreUtil2.getContainerOfType(element, Protobuf.class);
+  }
+
+  @Check public void checkQuotedReservedNameInEdition(Reserved reserved) {
+    if (isEditionElement(reserved)
+        && !Iterables.isEmpty(Iterables.filter(reserved.getReservations(), StringLiteral.class))) {
+      error(quotedReservedNameInEdition, reserved, null, QUOTED_RESERVED_NAME_IN_EDITION_ERROR);
+    }
+  }
+
+  @Check public void checkQuotedReservedNameInEdition(ReservedEnum reserved) {
+    if (isEditionElement(reserved)
+        && !Iterables.isEmpty(Iterables.filter(reserved.getReservations(), StringLiteral.class))) {
+      error(quotedReservedNameInEdition, reserved, null, QUOTED_RESERVED_NAME_IN_EDITION_ERROR);
+    }
   }
 
   @Check public void checkTagNumberIsGreaterThanZero(IndexedElement e) {
