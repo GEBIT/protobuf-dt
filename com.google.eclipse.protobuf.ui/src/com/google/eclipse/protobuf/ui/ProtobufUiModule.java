@@ -12,6 +12,7 @@ import static com.google.inject.name.Names.named;
 import static org.eclipse.ui.PlatformUI.isWorkbenchRunning;
 
 import com.google.eclipse.protobuf.formatting.IMaximumLineWidthProvider;
+import com.google.eclipse.protobuf.formatting.ProtobufFormatter;
 import com.google.eclipse.protobuf.preferences.general.GeneralPreferences;
 import com.google.eclipse.protobuf.resource.IResourceVerifier;
 import com.google.eclipse.protobuf.scoping.IImportResolver;
@@ -47,6 +48,7 @@ import org.eclipse.jface.text.hyperlink.IHyperlinkDetector;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.eclipse.ui.views.contentoutline.IContentOutlinePage;
 import org.eclipse.xtext.documentation.IEObjectDocumentationProvider;
+import org.eclipse.xtext.formatting.IFormatter;
 import org.eclipse.xtext.formatting.IIndentationInformation;
 import org.eclipse.xtext.ide.editor.syntaxcoloring.ISemanticHighlightingCalculator;
 import org.eclipse.xtext.parser.IParser;
@@ -90,6 +92,11 @@ public class ProtobufUiModule extends AbstractProtobufUiModule {
 
   public Class<? extends IEObjectDocumentationProvider> bindIEObjectDocumentationProvider() {
     return ProtobufDocumentationProvider.class;
+  }
+
+  // Formerly wired automatically by the (now removed) old-style FormatterFragment.
+  public Class<? extends IFormatter> bindIFormatter() {
+    return ProtobufFormatter.class;
   }
 
   @Override public Class<? extends IHyperlinkDetector> bindIHyperlinkDetector() {

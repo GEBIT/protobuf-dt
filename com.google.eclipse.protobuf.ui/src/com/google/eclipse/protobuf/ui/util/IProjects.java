@@ -12,11 +12,14 @@ import static com.google.eclipse.protobuf.ui.util.Workbenches.activeWorkbenchPag
 
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
-import org.eclipse.jface.viewers.StructuredSelection;
+import org.eclipse.core.runtime.IAdaptable;
+import org.eclipse.jface.viewers.ISelection;
+import org.eclipse.jface.viewers.ISelectionProvider;
+import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.ui.IViewPart;
 import org.eclipse.ui.IViewReference;
 import org.eclipse.ui.IWorkbenchPage;
-import org.eclipse.ui.views.navigator.ResourceNavigator;
+import org.eclipse.ui.IWorkbenchPartSite;
 
 import com.google.inject.Singleton;
 
@@ -25,19 +28,57 @@ import com.google.inject.Singleton;
  *
  * @author alruiz@google.com (Alex Ruiz)
  */
-@SuppressWarnings("deprecation")
 @Singleton public class IProjects {
   private static final IViewReference[] NO_VIEW_REFERENCES = new IViewReference[0];
 
+  /**
+   * Returns the project owning the resource currently selected in whichever view (e.g. Project
+   * Explorer, Package Explorer) is showing a resource-based selection in the active workbench
+   * page.
+   *
+   * <p>This used to look specifically for the (now removed) legacy
+   * {@code org.eclipse.ui.views.navigator.ResourceNavigator} view. Modern Eclipse no longer ships
+   * that view, so instead we look at the current selection of every view in the active page and
+   * take the first one that resolves to an <code>{@link IResource}</code>, which works with any
+   * navigator-style view.
+   */
   public IProject activeProject() {
     for (IViewReference reference : viewReferencesInActivePage()) {
       IViewPart part = reference.getView(false);
-      if (part instanceof ResourceNavigator) {
-        ResourceNavigator navigator = (ResourceNavigator) part;
-        StructuredSelection selection = (StructuredSelection) navigator.getTreeViewer().getSelection();
-        IResource resource = (IResource) selection.getFirstElement();
+      IResource resource = resourceSelectedIn(part);
+      if (resource != null) {
         return resource.getProject();
       }
+    }
+    return null;
+  }
+
+  private IResource resourceSelectedIn(IViewPart part) {
+    if (part == null) {
+      return null;
+    }
+    IWorkbenchPartSite site = part.getSite();
+    if (site == null) {
+      return null;
+    }
+    ISelectionProvider selectionProvider = site.getSelectionProvider();
+    if (selectionProvider == null) {
+      return null;
+    }
+    ISelection selection = selectionProvider.getSelection();
+    if (!(selection instanceof IStructuredSelection)) {
+      return null;
+    }
+    Object element = ((IStructuredSelection) selection).getFirstElement();
+    return asResource(element);
+  }
+
+  private IResource asResource(Object element) {
+    if (element instanceof IResource) {
+      return (IResource) element;
+    }
+    if (element instanceof IAdaptable) {
+      return ((IAdaptable) element).getAdapter(IResource.class);
     }
     return null;
   }
