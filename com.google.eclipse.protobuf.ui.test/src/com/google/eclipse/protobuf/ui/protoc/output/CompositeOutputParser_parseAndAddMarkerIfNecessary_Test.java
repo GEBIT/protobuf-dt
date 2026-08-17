@@ -10,7 +10,7 @@ package com.google.eclipse.protobuf.ui.protoc.output;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import org.eclipse.core.runtime.CoreException;
 import org.junit.Before;
@@ -33,7 +33,7 @@ public class CompositeOutputParser_parseAndAddMarkerIfNecessary_Test {
   @Test public void should_not_create_IMarker_if_line_does_not_match_error_pattern() throws CoreException {
     String line = "person.proto: File not found.";
     parser.parseAndAddMarkerIfNecessary(line, markerFactory);
-    verifyZeroInteractions(markerFactory);
+    verifyNoInteractions(markerFactory);
   }
 
   @Test public void should_attempt_to_create_IMarker_if_parser1_can_parse_line() throws CoreException {

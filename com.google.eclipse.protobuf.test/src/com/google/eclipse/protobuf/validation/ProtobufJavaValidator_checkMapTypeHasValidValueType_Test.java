@@ -16,7 +16,7 @@ import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.MAP_W
 import static org.eclipse.xtext.validation.ValidationMessageAcceptor.INSIGNIFICANT_INDEX;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.google.eclipse.protobuf.junit.core.XtextRule;
 import com.google.eclipse.protobuf.protobuf.MapType;
@@ -67,6 +67,6 @@ public class ProtobufJavaValidator_checkMapTypeHasValidValueType_Test {
     MessageField field = xtext.find("bar", MessageField.class);
     MapType map = ((MapTypeLink) field.getType()).getTarget();
     validator.checkMapTypeHasValidValueType(map);
-    verifyZeroInteractions(messageAcceptor);
+    verifyNoInteractions(messageAcceptor);
   }
 }

@@ -11,7 +11,7 @@ package com.google.eclipse.protobuf.validation;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
 
@@ -96,7 +96,7 @@ public class ProtobufJavaValidator_checkForReservedNameConflicts_Test {
   // }
   @Test public void should_not_find_conflict_with_nested_extension() {
     validator.checkForReservedNameConflicts(xtext.findFirst(Message.class));
-    verifyZeroInteractions(messageAcceptor);
+    verifyNoInteractions(messageAcceptor);
   }
 
   // syntax = "proto2";

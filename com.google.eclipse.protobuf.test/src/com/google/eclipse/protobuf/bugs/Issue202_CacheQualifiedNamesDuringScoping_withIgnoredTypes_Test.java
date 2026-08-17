@@ -12,7 +12,7 @@ import static java.util.Arrays.asList;
 
 import static org.junit.Assert.assertNull;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
@@ -78,6 +78,6 @@ public class Issue202_CacheQualifiedNamesDuringScoping_withIgnoredTypes_Test {
 
   @Test public void should_not_cache_objects_of_ignored_type() {
     assertNull(provider.getFullyQualifiedName(ignored, namingStrategy));
-    verifyZeroInteractions(namingStrategy);
+    verifyNoInteractions(namingStrategy);
   }
 }

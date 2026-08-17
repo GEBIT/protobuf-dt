@@ -20,7 +20,7 @@ import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.ONEOF
 import static org.eclipse.xtext.validation.ValidationMessageAcceptor.INSIGNIFICANT_INDEX;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.google.eclipse.protobuf.junit.core.XtextRule;
 import com.google.eclipse.protobuf.protobuf.MessageField;
@@ -65,7 +65,7 @@ public class ProtobufJavaValidator_checkFieldModifiers_Test {
   @Test public void should_not_create_error_if_no_modifier_in_proto3() {
     MessageField field = xtext.find("bar", MessageField.class);
     validator.checkFieldModifiers(field);
-    verifyZeroInteractions(messageAcceptor);
+    verifyNoInteractions(messageAcceptor);
   }
 
   // syntax = "proto3";
@@ -112,7 +112,7 @@ public class ProtobufJavaValidator_checkFieldModifiers_Test {
   @Test public void should_not_create_error_if_no_modifier_on_map_in_proto2() {
     MessageField field = xtext.find("bar", MessageField.class);
     validator.checkFieldModifiers(field);
-    verifyZeroInteractions(messageAcceptor);
+    verifyNoInteractions(messageAcceptor);
   }
 
   // syntax = "proto2";
@@ -126,7 +126,7 @@ public class ProtobufJavaValidator_checkFieldModifiers_Test {
   @Test public void should_not_create_error_if_no_modifier_on_oneof_field() {
     MessageField field = xtext.find("bar", MessageField.class);
     validator.checkFieldModifiers(field);
-    verifyZeroInteractions(messageAcceptor);
+    verifyNoInteractions(messageAcceptor);
   }
 
   // syntax = "proto2";

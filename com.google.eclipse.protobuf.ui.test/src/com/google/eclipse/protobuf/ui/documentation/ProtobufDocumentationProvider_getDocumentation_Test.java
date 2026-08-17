@@ -12,7 +12,7 @@ import static org.hamcrest.core.IsEqual.equalTo;
 import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import org.eclipse.emf.ecore.EObject;
@@ -48,7 +48,7 @@ public class ProtobufDocumentationProvider_getDocumentation_Test {
     when(delegate1.getDocumentation(o)).thenReturn(comment);
     assertThat(provider.getDocumentation(o), equalTo(comment));
     verify(delegate1).getDocumentation(o);
-    verifyZeroInteractions(delegate2);
+    verifyNoInteractions(delegate2);
   }
 
   @Test public void should_use_second_delegage_if_first_does_not_return_comment() {

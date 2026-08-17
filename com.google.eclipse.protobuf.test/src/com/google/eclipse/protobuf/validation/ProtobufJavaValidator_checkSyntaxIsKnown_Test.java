@@ -15,7 +15,7 @@ import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.SYNTA
 import static org.eclipse.xtext.validation.ValidationMessageAcceptor.INSIGNIFICANT_INDEX;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.eclipse.protobuf.junit.core.XtextRule;
@@ -59,13 +59,13 @@ public class ProtobufJavaValidator_checkSyntaxIsKnown_Test {
   @Test public void should_not_create_error_if_syntax_is_proto2() {
     when(syntax.getName()).thenReturn(createLiteralOf("proto2"));
     validator.checkSyntaxIsKnown(syntax);
-    verifyZeroInteractions(messageAcceptor);
+    verifyNoInteractions(messageAcceptor);
   }
 
   @Test public void should_not_create_error_if_syntax_is_proto3() {
     when(syntax.getName()).thenReturn(createLiteralOf("proto3"));
     validator.checkSyntaxIsKnown(syntax);
-    verifyZeroInteractions(messageAcceptor);
+    verifyNoInteractions(messageAcceptor);
   }
 
   private static StringLiteral createLiteralOf(String s) {

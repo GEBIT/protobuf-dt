@@ -11,7 +11,7 @@ package com.google.eclipse.protobuf.validation;
 import static org.eclipse.xtext.validation.ValidationMessageAcceptor.INSIGNIFICANT_INDEX;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
@@ -60,6 +60,6 @@ public class ProtobufJavaValidator_checkOnlyOnePackageDefinition_Test {
   @Test public void should_not_create_error_if_there_is_only_one_package_definition() {
     Package p = xtext.find("com.google.eclipse", Package.class);
     validator.checkOnlyOnePackageDefinition(p);
-    verifyZeroInteractions(messageAcceptor);
+    verifyNoInteractions(messageAcceptor);
   }
 }
