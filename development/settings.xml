@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+	<mirrors>
+		<mirror>
+			<id>Nexus</id>
+			<name>Nexus Public Mirror</name>
+			<url>https://gebit-nexus.local.gebit.de/content/groups/public</url>
+			<mirrorOf>central</mirrorOf>
+		</mirror>
+	</mirrors>
+
+	<!-- you will need a matching ~/.m2/security-settings.xml -->
+	<servers>
+		<!-- Defines the credentials for deployment of releases to the central repository -->
+		<server>
+			<id>rp-releases</id>
+			<username>${env.NEXUS_RP_USERNAME}</username>
+			<password>${env.NEXUS_RP_PASSWORD}</password>
+		</server>
+
+		<!-- Defines the credentials for deployment of snapshots to the central repository
+		<server>
+			<id>rp-snapshots</id>
+			<username>${env.NEXUS_RP_USERNAME}</username>
+			<password>${env.NEXUS_RP_PASSWORD}</password>
+		</server>
+		-->
+
+		<!-- Defines the credentials for deployment of snapshots to the central repository -->
+		<server>
+			<id>rp-integration</id>
+			<username>${env.NEXUS_RP_USERNAME}</username>
+			<password>${env.NEXUS_RP_PASSWORD}</password>
+		</server>
+
+		<!-- Defines the user to deploy the site. Make sure the jenkins user has the correct key to access the server. -->
+		<server>
+			<id>gebit-maven-site</id>
+			<username>jenkins</username>
+		</server>
+	</servers>
+
+	<profiles>
+		<profile>
+			<id>nexus-profile</id>
+			<repositories>
+				<repository>
+					<id>releases</id>
+					<url>https://gebit-nexus.local.gebit.de/content/groups/releases</url>
+					<releases>
+						<enabled>true</enabled>
+					</releases>
+					<snapshots>
+						<enabled>false</enabled>
+					</snapshots>
+				</repository>
+				<repository>
+					<id>integration</id>
+					<url>https://gebit-nexus.local.gebit.de/content/groups/integration</url>
+					<releases>
+						<enabled>true</enabled>
+					</releases>
+					<snapshots>
+						<enabled>false</enabled>
+					</snapshots>
+				</repository>
+				<repository>
+					<id>snapshots</id>
+					<url>https://gebit-nexus.local.gebit.de/content/groups/snapshots</url>
+					<releases>
+						<enabled>false</enabled>
+					</releases>
+					<snapshots>
+						<enabled>true</enabled>
+					</snapshots>
+				</repository>
+				<repository>
+					<id>public</id>
+					<url>https://gebit-nexus.local.gebit.de/content/repositories/public</url>
+					<releases>
+						<enabled>true</enabled>
+					</releases>
+					<snapshots>
+						<enabled>false</enabled>
+					</snapshots>
+				</repository>
+			</repositories>
+
+			<pluginRepositories>
+				<pluginRepository>
+					<id>plugin-integration</id>
+					<url>https://gebit-nexus.local.gebit.de/content/groups/integration</url>
+					<releases>
+						<enabled>true</enabled>
+					</releases>
+					<snapshots>
+						<enabled>false</enabled>
+					</snapshots>
+				</pluginRepository>
+				<pluginRepository>
+					<id>plugin-releases</id>
+					<url>https://gebit-nexus.local.gebit.de/content/groups/releases</url>
+					<releases>
+						<enabled>true</enabled>
+					</releases>
+					<snapshots>
+						<enabled>false</enabled>
+					</snapshots>
+				</pluginRepository>
+				<pluginRepository>
+					<id>plugin-snapshots</id>
+					<url>https://gebit-nexus.local.gebit.de/content/groups/snapshots</url>
+					<releases>
+						<enabled>false</enabled>
+					</releases>
+					<snapshots>
+						<enabled>true</enabled>
+					</snapshots>
+				</pluginRepository>
+			</pluginRepositories>
+		</profile>
+	</profiles>
+
+	<activeProfiles>
+		<activeProfile>nexus-profile</activeProfile>
+	</activeProfiles>
+</settings>

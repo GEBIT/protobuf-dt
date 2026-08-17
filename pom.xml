@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>de.gebit.build</groupId>
+		<artifactId>gebit-eclipse</artifactId>
+		<version>3.16.0</version>
+		<relativePath />
+	</parent>
+
+	<groupId>de.gebit.eclipse.protobuf</groupId>
+	<artifactId>protobuf-dt</artifactId>
+	<version>2.6.3-SNAPSHOT</version>
+	<packaging>pom</packaging>
+	<name>Protocol Buffer Editor</name>
+
+	<properties>
+		<version.java>21</version.java>
+		<version.eclipse>2025-03</version.eclipse>
+		<tiles.applyBefore>de.gebit.eclipse.protobuf:protobuf-dt</tiles.applyBefore>
+	</properties>
+
+	<modules>
+		<module>com.google.eclipse.protobuf</module>
+		<module>com.google.eclipse.protobuf.ui</module>
+		<module>com.google.eclipse.protobuf.cdt</module>
+		<module>com.google.eclipse.protobuf.feature</module>
+		<module>com.google.eclipse.protobuf.test</module>
+		<module>com.google.eclipse.protobuf.cdt.test</module>
+		<module>com.google.eclipse.protobuf.ui.test</module>
+		<module>com.google.eclipse.protobuf.ui.integration.test</module>
+		<module>com.google.eclipse.protobuf.ui.functional.test</module>
+	</modules>
+</project>

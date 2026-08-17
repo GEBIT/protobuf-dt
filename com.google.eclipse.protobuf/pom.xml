@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>de.gebit.eclipse.protobuf</groupId>
+		<artifactId>protobuf-dt</artifactId>
+		<version>2.6.3-SNAPSHOT</version>
+	</parent>
+	<artifactId>de.gebit.eclipse.protobuf</artifactId>
+	<packaging>eclipse-plugin</packaging>
+
+	<properties>
+		<version.xtext>2.38.0</version.xtext>
+		<version.mwe2>2.26.0</version.mwe2>
+		<!-- exact transitive versions pulled in by org.eclipse.xtext:2.38.0, needed to
+		     precompile the two mwe2 bootstrap classes below (see dependency:tree) -->
+		<version.guice>7.0.0</version.guice>
+		<version.emf.ecore>2.36.0</version.emf.ecore>
+		<version.emf.common>2.30.0</version.emf.common>
+	</properties>
+
+	<build>
+		<plugins>
+			<!-- ProtobufGeneratorModule/ProtobufEcorePostProcessor/ProtobufValidatorNaming
+			     (referenced as guiceModule from GenerateProtobuf.mwe2, see below) live in
+			     mwe2-bootstrap/, a source folder that is deliberately NOT part of this
+			     bundle's "source.." (build.properties): they depend on the
+			     org.eclipse.xtext.xtext.generator tooling bundle, which is a build-time-only
+			     dependency and must never become a runtime Require-Bundle of this plugin.
+			     They also aren't compiled yet when generate-sources runs (compile always
+			     comes later in the Tycho lifecycle). Precompile them here, in isolation, by
+			     invoking javac directly with an explicit classpath, so the mwe2 workflow can
+			     resolve them as JVM types. -->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<version>3.6.3</version>
+				<executions>
+					<execution>
+						<id>compile-mwe2-bootstrap-classes</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>exec</goal>
+						</goals>
+						<configuration>
+							<!-- run as an external process (not exec:java, which runs in-process
+							     and would kill the Maven build the moment javac's Main.main()
+							     calls System.exit()) -->
+							<executable>javac</executable>
+							<arguments>
+								<argument>-d</argument>
+								<argument>${project.build.directory}/mwe2-bootstrap-classes</argument>
+								<argument>-classpath</argument>
+								<argument>${settings.localRepository}/org/eclipse/xtext/org.eclipse.xtext/${version.xtext}/org.eclipse.xtext-${version.xtext}.jar:${settings.localRepository}/org/eclipse/xtext/org.eclipse.xtext.xtext.generator/${version.xtext}/org.eclipse.xtext.xtext.generator-${version.xtext}.jar:${settings.localRepository}/com/google/inject/guice/${version.guice}/guice-${version.guice}.jar:${settings.localRepository}/org/eclipse/emf/org.eclipse.emf.ecore/${version.emf.ecore}/org.eclipse.emf.ecore-${version.emf.ecore}.jar:${settings.localRepository}/org/eclipse/emf/org.eclipse.emf.common/${version.emf.common}/org.eclipse.emf.common-${version.emf.common}.jar</argument>
+								<argument>--release</argument>
+								<argument>${version.java}</argument>
+								<argument>${project.basedir}/mwe2-bootstrap/com/google/eclipse/protobuf/ProtobufGeneratorModule.java</argument>
+								<argument>${project.basedir}/mwe2-bootstrap/com/google/eclipse/protobuf/ProtobufEcorePostProcessor.java</argument>
+								<argument>${project.basedir}/mwe2-bootstrap/com/google/eclipse/protobuf/ProtobufValidatorNaming.java</argument>
+							</arguments>
+						</configuration>
+					</execution>
+					<execution>
+						<id>generate-xtext-sources</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>java</goal>
+						</goals>
+						<configuration>
+							<mainClass>org.eclipse.emf.mwe2.launch.runtime.Mwe2Launcher</mainClass>
+							<arguments>
+								<argument>${project.basedir}/src/com/google/eclipse/protobuf/GenerateProtobuf.mwe2</argument>
+								<argument>-p</argument>
+								<argument>rootPath=${project.basedir}/..</argument>
+							</arguments>
+							<classpathScope>compile</classpathScope>
+							<includePluginDependencies>true</includePluginDependencies>
+							<additionalClasspathElements>
+								<additionalClasspathElement>${project.build.directory}/mwe2-bootstrap-classes</additionalClasspathElement>
+								<!-- so the workflow can resolve classpath:/com/google/eclipse/protobuf/Protobuf.xtext -->
+								<additionalClasspathElement>${project.basedir}/src</additionalClasspathElement>
+							</additionalClasspathElements>
+							<!-- see https://bugs.eclipse.org/bugs/show_bug.cgi?id=475098#c3 -->
+							<cleanupDaemonThreads>false</cleanupDaemonThreads>
+						</configuration>
+					</execution>
+				</executions>
+				<dependencies>
+					<dependency>
+						<groupId>org.eclipse.emf</groupId>
+						<artifactId>org.eclipse.emf.mwe2.launch</artifactId>
+						<version>${version.mwe2}</version>
+					</dependency>
+					<dependency>
+						<groupId>org.eclipse.xtext</groupId>
+						<artifactId>org.eclipse.xtext.xtext.generator</artifactId>
+						<version>${version.xtext}</version>
+					</dependency>
+					<dependency>
+						<groupId>com.google.inject</groupId>
+						<artifactId>guice</artifactId>
+						<version>${version.guice}</version>
+					</dependency>
+					<dependency>
+						<groupId>org.eclipse.emf</groupId>
+						<artifactId>org.eclipse.emf.ecore</artifactId>
+						<version>${version.emf.ecore}</version>
+					</dependency>
+					<dependency>
+						<groupId>org.eclipse.emf</groupId>
+						<artifactId>org.eclipse.emf.common</artifactId>
+						<version>${version.emf.common}</version>
+					</dependency>
+				</dependencies>
+			</plugin>
+		</plugins>
+	</build>
+</project>
