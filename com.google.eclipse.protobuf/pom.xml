@@ -93,6 +93,21 @@
 						<artifactId>org.eclipse.emf.mwe2.launch</artifactId>
 						<version>${version.mwe2}</version>
 					</dependency>
+					<!-- org.eclipse.emf.mwe2.language is no longer pulled in transitively via
+					     org.eclipse.emf.mwe2.launch; must be listed explicitly. -->
+					<dependency>
+						<groupId>org.eclipse.emf</groupId>
+						<artifactId>org.eclipse.emf.mwe2.language</artifactId>
+						<version>${version.mwe2}</version>
+					</dependency>
+					<!-- org.eclipse.xtext.common.types is a separate bundle/artifact (needed by
+					     org.eclipse.emf.mwe2.language's runtime module), no longer transitively
+					     pulled in as part of org.eclipse.xtext itself. -->
+					<dependency>
+						<groupId>org.eclipse.xtext</groupId>
+						<artifactId>org.eclipse.xtext.common.types</artifactId>
+						<version>${version.xtext}</version>
+					</dependency>
 					<dependency>
 						<groupId>org.eclipse.xtext</groupId>
 						<artifactId>org.eclipse.xtext.xtext.generator</artifactId>

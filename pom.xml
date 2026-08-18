@@ -34,4 +34,39 @@
 		<module>com.google.eclipse.protobuf.ui.integration.test</module>
 		<module>com.google.eclipse.protobuf.ui.functional.test</module>
 	</modules>
+
+	<build>
+		<plugins>
+			<!-- Tycho 5.x's validate-classpath step requires an actual provider bundle
+			     for the osgi.component capability (Declarative Services extender) to be
+			     present in the resolved target platform. org.apache.felix.scr provides
+			     this capability, but it is only reachable via Require-Capability (not a
+			     Require-Bundle), so the p2 slicer does not pull it into the resolved
+			     target platform automatically. Force its inclusion. See
+			     https://github.com/eclipse-tycho/tycho/issues/3824 and
+			     https://github.com/eclipse-tycho/tycho/issues/4060. -->
+			<plugin>
+				<groupId>org.eclipse.tycho</groupId>
+				<artifactId>target-platform-configuration</artifactId>
+				<configuration>
+					<dependency-resolution>
+						<extraRequirements>
+							<requirement>
+								<type>eclipse-plugin</type>
+								<id>org.apache.felix.scr</id>
+								<versionRange>0.0.0</versionRange>
+							</requirement>
+							<!-- EventAdmin implementation backing IEventBroker, needed for
+							     UI tests (org.eclipse.ui.workbench) to start up correctly. -->
+							<requirement>
+								<type>eclipse-plugin</type>
+								<id>org.eclipse.equinox.event</id>
+								<versionRange>0.0.0</versionRange>
+							</requirement>
+						</extraRequirements>
+					</dependency-resolution>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
 </project>
