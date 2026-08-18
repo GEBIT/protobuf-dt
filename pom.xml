@@ -33,6 +33,7 @@
 		<module>com.google.eclipse.protobuf.ui.test</module>
 		<module>com.google.eclipse.protobuf.ui.integration.test</module>
 		<module>com.google.eclipse.protobuf.ui.functional.test</module>
+		<module>com.google.eclipse.protobuf.site</module>
 	</modules>
 
 	<build>
