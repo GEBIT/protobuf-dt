@@ -18,9 +18,11 @@ import com.google.eclipse.protobuf.scoping.ExtensionRegistryProvider;
 import com.google.eclipse.protobuf.scoping.ProtobufCaseInsensitivityHelper;
 import com.google.eclipse.protobuf.scoping.ProtobufImportUriGlobalScopeProvider;
 import com.google.eclipse.protobuf.scoping.ProtobufImportedNamespaceAwareLocalScopeProvider;
+import com.google.eclipse.protobuf.scoping.ProtobufScopeProvider;
 import com.google.eclipse.protobuf.validation.ProtobufResourceValidator;
 import com.google.eclipse.protobuf.validation.ProtobufSyntaxErrorMessageProvider;
 import com.google.inject.Binder;
+import com.google.inject.name.Names;
 
 import org.eclipse.core.runtime.IExtensionRegistry;
 import org.eclipse.xtext.conversion.IValueConverterService;
@@ -33,6 +35,7 @@ import org.eclipse.xtext.resource.XtextResourceSet;
 import org.eclipse.xtext.scoping.ICaseInsensitivityHelper;
 import org.eclipse.xtext.scoping.IGlobalScopeProvider;
 import org.eclipse.xtext.scoping.IScopeProvider;
+import org.eclipse.xtext.scoping.impl.AbstractDeclarativeScopeProvider;
 import org.eclipse.xtext.validation.IResourceValidator;
 
 /**
@@ -89,7 +92,16 @@ public class ProtobufRuntimeModule extends AbstractProtobufRuntimeModule {
     return ProtobufImportUriGlobalScopeProvider.class;
   }
 
+  @Override
   public Class<? extends IScopeProvider> bindIScopeProvider() {
-    return ProtobufImportedNamespaceAwareLocalScopeProvider.class;
+    return ProtobufScopeProvider.class;
+  }
+
+  @Override
+  public void configureIScopeProviderDelegate(Binder binder) {
+    binder
+        .bind(IScopeProvider.class)
+        .annotatedWith(Names.named(AbstractDeclarativeScopeProvider.NAMED_DELEGATE))
+        .to(ProtobufImportedNamespaceAwareLocalScopeProvider.class);
   }
 }

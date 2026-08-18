@@ -16,6 +16,7 @@ import static com.google.eclipse.protobuf.junit.matchers.ContainNames.contain;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.OPTION_SOURCE__TARGET;
 import org.eclipse.emf.ecore.EReference;
 import org.eclipse.xtext.scoping.IScope;
+import org.eclipse.xtext.scoping.IScopeProvider;
 import org.junit.Rule;
 import org.junit.Test;
 import com.google.eclipse.protobuf.junit.core.XtextRule;
@@ -34,6 +35,7 @@ public class ProtobufScopeProvider_scope_OptionSource_target_Test {
   @Rule public XtextRule xtext = overrideRuntimeModuleWith(integrationTestModule());
 
   @Inject private ProtobufScopeProvider scopeProvider;
+  @Inject private IScopeProvider injectedScopeProvider;
 
   // syntax = "proto2";
   //
@@ -41,6 +43,14 @@ public class ProtobufScopeProvider_scope_OptionSource_target_Test {
   @Test public void should_provide_sources_for_native_option() {
     Option option = xtext.find("optimize_for", Option.class);
     IScope scope = scopeProvider.getScope(option.getSource(), OPTION_SOURCE__TARGET);
+    assertThat(descriptionsIn(scope), contain("java_package", "java_outer_classname",
+        "java_multiple_files", "java_generate_equals_and_hash", "optimize_for",
+        "cc_generic_services", "java_generic_services", "py_generic_services"));
+  }
+
+  @Test public void should_provide_sources_for_native_option_through_runtime_scope_provider() {
+    Option option = xtext.find("optimize_for", Option.class);
+    IScope scope = injectedScopeProvider.getScope(option.getSource(), OPTION_SOURCE__TARGET);
     assertThat(descriptionsIn(scope), contain("java_package", "java_outer_classname",
         "java_multiple_files", "java_generate_equals_and_hash", "optimize_for",
         "cc_generic_services", "java_generic_services", "py_generic_services"));
