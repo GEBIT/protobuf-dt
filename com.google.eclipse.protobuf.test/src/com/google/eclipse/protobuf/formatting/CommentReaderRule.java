@@ -11,57 +11,49 @@ package com.google.eclipse.protobuf.formatting;
 
 import java.util.List;
 
-import org.eclipse.xtext.ISetup;
 import org.eclipse.xtext.nodemodel.ICompositeNode;
-import org.eclipse.xtext.parser.IParseResult;
 import org.junit.rules.MethodRule;
 import org.junit.runners.model.FrameworkMethod;
 import org.junit.runners.model.Statement;
 
 import com.google.eclipse.protobuf.junit.core.CommentReader;
 import com.google.eclipse.protobuf.junit.core.OverrideRuntimeModuleSetup;
-import com.google.eclipse.protobuf.junit.core.ProtobufInTestsParser;
-import com.google.inject.Injector;
+import com.google.eclipse.protobuf.junit.core.XtextRule;
 import com.google.inject.Module;
 
 /**
  * @author alruiz@google.com (Alex Ruiz)
  */
 class CommentReaderRule implements MethodRule {
-  private final Injector injector;
+  private final XtextRule xtext;
 
   private final CommentReader commentReader;
-  private final ProtobufInTestsParser protobufParser;
 
   private ICompositeNode rootNode;
   private String expectedText;
 
   static CommentReaderRule overrideRuntimeModuleWith(Module...testModules) {
-    ISetup setup = new OverrideRuntimeModuleSetup(testModules);
-    Injector injector = setup.createInjectorAndDoEMFRegistration();
-    return new CommentReaderRule(injector);
+    return new CommentReaderRule(XtextRule.createWith(new OverrideRuntimeModuleSetup(testModules)));
   }
 
-  private CommentReaderRule(Injector injector) {
-    this.injector = injector;
+  private CommentReaderRule(XtextRule xtext) {
+    this.xtext = xtext;
     commentReader = new CommentReader();
-    protobufParser = new ProtobufInTestsParser(injector);
   }
 
-  @Override public Statement apply(Statement base, FrameworkMethod method, Object target) {
-    injector.injectMembers(target);
-    rootNode = null;
-    List<String> comments = commentReader.commentsIn(method);
-    if (comments.size() == 2) {
-      parseText(comments.get(0));
-      expectedText = comments.get(1);
-    }
-    return base;
-  }
-
-  private void parseText(String text) {
-    IParseResult parseResult = protobufParser.parseText(text);
-    rootNode = parseResult.getRootNode();
+  @Override public Statement apply(final Statement base, final FrameworkMethod method, Object target) {
+    return xtext.apply(new Statement() {
+      @Override public void evaluate() throws Throwable {
+        rootNode = null;
+        expectedText = null;
+        List<String> comments = commentReader.commentsIn(method);
+        if (comments.size() == 2) {
+          rootNode = xtext.resource().getParseResult().getRootNode();
+          expectedText = comments.get(1);
+        }
+        base.evaluate();
+      }
+    }, method, target);
   }
 
   ICompositeNode rootNode() {

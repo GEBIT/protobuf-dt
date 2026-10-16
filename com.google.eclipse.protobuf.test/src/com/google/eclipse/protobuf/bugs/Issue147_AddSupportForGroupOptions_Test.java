@@ -46,8 +46,7 @@ public class Issue147_AddSupportForGroupOptions_Test {
     NativeFieldOption option = xtext.find("deprecated", NativeFieldOption.class);
     IScope scope = scopeProvider.scope_OptionSource_target(option.getSource(),
         OPTION_SOURCE__TARGET);
-    assertThat(descriptionsIn(scope), contain("ctype", "packed", "deprecated",
-        "experimental_map_key"));
+    assertThat(descriptionsIn(scope), contain("ctype", "packed", "deprecated"));
   }
 
   // syntax = "proto2";

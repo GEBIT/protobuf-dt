@@ -8,12 +8,9 @@
  */
 package com.google.eclipse.protobuf.ui.editor.model;
 
-import static com.google.common.io.Closeables.closeQuietly;
 import static com.google.eclipse.protobuf.ui.util.IStatusFactory.error;
 
-import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
 
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.emf.common.util.URI;
@@ -36,23 +33,16 @@ class UriDocumentContentsFactory implements DocumentContentsFactory {
     UriEditorInput input = supportedEditorInputType().cast(element);
     URI uri = input.getFileUri();
     try {
-      String contents = contentsOf(uri);
+      XtextResource resource = resourceFactory.createResource(uri, input.getOriginatingProject());
+      String contents;
+      try (InputStream stream = resource.getResourceSet().getURIConverter().createInputStream(uri)) {
+        contents = contentReader.contentsOf(stream);
+      }
       document.set(contents);
-      XtextResource resource = resourceFactory.createResource(uri, contents);
+      resourceFactory.loadResource(resource, contents);
       document.setInput(resource);
     } catch (Throwable t) {
       throw new CoreException(error(t));
-    }
-  }
-
-  private String contentsOf(URI uri) throws IOException {
-    InputStream inputStream = null;
-    try {
-      URL url = new URL(uri.toString());
-      inputStream = url.openConnection().getInputStream();
-      return contentReader.contentsOf(inputStream);
-    } finally {
-      closeQuietly(inputStream);
     }
   }
 

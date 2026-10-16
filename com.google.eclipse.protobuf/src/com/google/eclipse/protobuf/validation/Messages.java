@@ -48,12 +48,35 @@ public class Messages extends NLS {
   public static String oneofFieldWithModifier;
   public static String requiredInProto3;
   public static String reservedIndexAndName;
-  public static String reservedToMax;
   public static String scopingError;
   public static String tagNumberRangeConflict;
   public static String tagNumberConflict;
   public static String unknownSyntax;
   public static String unrecognizedSyntaxIdentifier;
+  public static String proto3Default;
+  public static String fieldNumberTooLarge;
+  public static String implementationReservedNumber;
+  public static String rangeNumberTooLarge;
+  public static String enumNumberOutOfRange;
+  public static String proto3Group;
+  public static String proto3ExtensionRange;
+  public static String proto3Stream;
+  public static String proto3MessageSet;
+  public static String proto3Extension;
+  public static String extensionNumberOutsideRange;
+  public static String duplicateExtensionNumber;
+  public static String repeatedOneof;
+  public static String invalidOneofMember;
+  public static String emptyOneof;
+  public static String mapInOneof;
+  public static String emptyEnum;
+  public static String proto3EnumZero;
+  public static String mapEnumZero;
+  public static String proto3ClosedEnum;
+  public static String aliasFalseHasNoEffect;
+  public static String aliasWithoutDuplicate;
+  public static String enumNameConflict;
+  public static String mapEntryNameConflict;
 
   static {
     Class<Messages> targetType = Messages.class;

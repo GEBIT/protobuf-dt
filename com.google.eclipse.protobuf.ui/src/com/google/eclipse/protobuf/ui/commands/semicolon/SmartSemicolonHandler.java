@@ -24,13 +24,14 @@ import com.google.eclipse.protobuf.protobuf.Group;
 import com.google.eclipse.protobuf.protobuf.IndexedElement;
 import com.google.eclipse.protobuf.protobuf.Literal;
 import com.google.eclipse.protobuf.protobuf.Message;
-import com.google.eclipse.protobuf.protobuf.MessageElement;
 import com.google.eclipse.protobuf.protobuf.MessageField;
+import com.google.eclipse.protobuf.protobuf.TypeExtension;
 import com.google.eclipse.protobuf.ui.commands.SmartInsertHandler;
 import com.google.eclipse.protobuf.ui.preferences.editor.numerictag.NumericTagPreferences;
 import com.google.inject.Inject;
 
 import org.apache.log4j.Logger;
+import org.eclipse.emf.common.util.TreeIterator;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IRegion;
@@ -41,7 +42,6 @@ import org.eclipse.text.edits.DeleteEdit;
 import org.eclipse.text.edits.MultiTextEdit;
 import org.eclipse.text.edits.ReplaceEdit;
 import org.eclipse.text.edits.TextEdit;
-import org.eclipse.xtext.EcoreUtil2;
 import org.eclipse.xtext.RuleCall;
 import org.eclipse.xtext.nodemodel.ILeafNode;
 import org.eclipse.xtext.nodemodel.INode;
@@ -70,7 +70,8 @@ import java.util.regex.Pattern;
  */
 public class SmartSemicolonHandler extends SmartInsertHandler {
   private static final String SEMICOLON = ";";
-  private static final Pattern NUMBERS_PATTERN = compile("[\\d]+");
+  private static final long NO_INDEX = Long.MIN_VALUE;
+  private static final Pattern NUMBERS_PATTERN = compile("-?\\d+");
 
   private static Logger logger = Logger.getLogger(SmartSemicolonHandler.class);
 
@@ -95,7 +96,7 @@ public class SmartSemicolonHandler extends SmartInsertHandler {
             findCompletableElement(editor, styledText.getCaretOffset(), resource);
 
         long newIndex = determineNewIndex(completableElement);
-        if (newIndex != -1) {
+        if (newIndex != NO_INDEX) {
           final TextEdit edit = new MultiTextEdit();
 
           TextEdit indexEdit =
@@ -109,10 +110,16 @@ public class SmartSemicolonHandler extends SmartInsertHandler {
               edit.addChild(trailingWhitespaceEdit);
             }
 
-            long newNextIndex = newIndex + 1;
-            TextEdit commentEdit = updateNextIndexComment(completableElement, newNextIndex);
-            if (commentEdit != null) {
-              edit.addChild(commentEdit);
+            long newNextIndex = completableElement instanceof IndexedElement
+                ? indexedElements.calculateNewIndexAfter((IndexedElement) completableElement, newIndex)
+                : literals.calculateNewIndexAfter((Literal) completableElement, newIndex);
+            boolean hasNextIndex = completableElement instanceof IndexedElement
+                ? newNextIndex != -1L : newNextIndex != NO_INDEX;
+            if (hasNextIndex) {
+              TextEdit commentEdit = updateNextIndexComment(completableElement, newNextIndex);
+              if (commentEdit != null) {
+                edit.addChild(commentEdit);
+              }
             }
 
             try {
@@ -162,7 +169,8 @@ public class SmartSemicolonHandler extends SmartInsertHandler {
     if (model instanceof IndexedElement) {
       IndexedElement indexedElement = (IndexedElement) model;
       if (indexedElements.indexOf(indexedElement) <= 0) {
-        return indexedElements.calculateNewIndexFor(indexedElement);
+        long index = indexedElements.calculateNewIndexFor(indexedElement);
+        return index == -1L ? NO_INDEX : index;
       }
     } else if (model instanceof Literal) {
       Literal literal = (Literal) model;
@@ -172,7 +180,7 @@ public class SmartSemicolonHandler extends SmartInsertHandler {
       }
     }
 
-    return -1;
+    return NO_INDEX;
   }
 
   @VisibleForTesting ReplaceEdit completeWithIndex(INode elementNode, long newIndex) {
@@ -252,9 +260,17 @@ public class SmartSemicolonHandler extends SmartInsertHandler {
 
   @VisibleForTesting ReplaceEdit updateNextIndexComment(
       EObject completedElement, long newNextIndex) {
-    Class<? extends EObject> containingClass =
-        completedElement instanceof IndexedElement ? Message.class : Enum.class;
-    EObject containingElement = EcoreUtil2.getContainerOfType(completedElement, containingClass);
+    EObject containingElement = completedElement.eContainer();
+    while (containingElement != null && !(containingElement instanceof Message)
+        && !(containingElement instanceof Group) && !(containingElement instanceof Enum)) {
+      if (containingElement instanceof TypeExtension) {
+        return null;
+      }
+      containingElement = containingElement.eContainer();
+    }
+    if (containingElement == null) {
+      return null;
+    }
     Iterable<ILeafNode> topLevelCommentNodes = findTopLevelCommentNodes(containingElement);
 
     Collection<Pattern> patterns = compileIndexCommentPatterns();
@@ -270,14 +286,18 @@ public class SmartSemicolonHandler extends SmartInsertHandler {
 
   private Iterable<ILeafNode> findTopLevelCommentNodes(EObject containingElement) {
     Set<ILeafNode> nestedLeafNodes = new HashSet<>();
-    if (containingElement instanceof Message) {
-      Collection<MessageElement> nestedContainers = new ArrayList<>();
-      nestedContainers.addAll(EcoreUtil2.getAllContentsOfType(containingElement, Message.class));
-      nestedContainers.addAll(EcoreUtil2.getAllContentsOfType(containingElement, Enum.class));
-      for (MessageElement nestedContainer : nestedContainers) {
-        for (ILeafNode nestedLeafNode : NodeModelUtils.getNode(nestedContainer).getLeafNodes()) {
-          nestedLeafNodes.add(nestedLeafNode);
+    TreeIterator<EObject> contents = containingElement.eAllContents();
+    while (contents.hasNext()) {
+      EObject child = contents.next();
+      if (child instanceof Message || child instanceof Group || child instanceof Enum
+          || child instanceof TypeExtension) {
+        INode node = NodeModelUtils.getNode(child);
+        if (node != null) {
+          for (ILeafNode leaf : node.getLeafNodes()) {
+            nestedLeafNodes.add(leaf);
+          }
         }
+        contents.prune();
       }
     }
 

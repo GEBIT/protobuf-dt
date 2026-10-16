@@ -15,6 +15,8 @@ import static org.mockito.Mockito.mock;
 import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
 
+import java.math.BigInteger;
+
 import org.eclipse.xtext.nodemodel.INode;
 import org.junit.Before;
 import org.junit.Rule;
@@ -40,7 +42,7 @@ public class Issue165_Support64BitNumbers_Test {
   }
 
   @Test public void should_parse_64_bit_number() {
-    Long value = converter.toValue("18446744073709551615", node);
-    assertThat(value, equalTo(1L));
+    BigInteger value = converter.toValue("18446744073709551615", node);
+    assertThat(value, equalTo(new BigInteger("18446744073709551615")));
   }
 }

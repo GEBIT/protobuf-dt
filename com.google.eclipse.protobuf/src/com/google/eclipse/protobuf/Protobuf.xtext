@@ -14,17 +14,18 @@ import "http://www.eclipse.org/emf/2002/Ecore" as ecore
 generate protobuf "http://www.google.com/eclipse/protobuf/Protobuf"
 
 Protobuf:
+  {Protobuf}
   (syntax=Syntax)?
-  (elements+=ProtobufElement)*;
+  (elements+=ProtobufElement | ';')*;
 
 Syntax:
-  'syntax' '=' name=StringLiteral (';')+;
+  'syntax' '=' name=StringLiteral ';';
 
 ProtobufElement:
   Package | Import | Option | ComplexType | TypeExtension | Service;
 
 Package:
-  'package' importedNamespace=PackageName (';')+;
+  'package' importedNamespace=PackageName ';';
 
 PackageName:
   IdOrReservedWord ('.' IdOrReservedWord)*;
@@ -33,30 +34,30 @@ Import:
   NormalImport | PublicImport | WeakImport;
 
 NormalImport:
-  'import' path=StringLiteral (';')+;
+  'import' path=StringLiteral ';';
 
 PublicImport:
-  'import' 'public' path=StringLiteral (';')+;
+  'import' 'public' path=StringLiteral ';';
 
 WeakImport:
-  'import' 'weak' path=StringLiteral (';')+;
+  'import' 'weak' path=StringLiteral ';';
 
 ComplexType:
   Enum | ExtensibleType;
 
 Message:
   ->'message' name=Name '{'
-  elements+=MessageElement*
+  (elements+=MessageElement | ';')*
   '}' (';')?;
 
 MessageElement:
   =>Option | Extensions | ComplexType | MessageField | TypeExtension | OneOf | Reserved;
 
 IndexRange:
-  from=LONG ('to' to=IndexRangeMax)?;
+  from=IndexNumber ('to' to=IndexRangeMax)?;
 
 IndexRangeMax:
-  LONG | 'max';
+  IndexNumber | 'max';
 
 // Hack to make the default modifier 'unspecified'
 enum ModifierEnum:
@@ -67,9 +68,9 @@ enum Modifier returns ModifierEnum:
   optional | required | repeated;
 
 Group:
-  (modifier=Modifier)? =>'group' name=Name '=' index=(LONG | HEX)
+  (modifier=Modifier)? =>'group' name=Name '=' index=IndexNumber
   ('[' (fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)*) ']')? '{'
-  elements+=GroupElement*
+  (elements+=GroupElement | ';')*
   '}' (';')?;
 
 GroupElement:
@@ -77,21 +78,22 @@ GroupElement:
 
 OneOf:
   (isRepeated?='repeated')? =>'oneof' name=Name '{'
-  elements+=OneOfElement+
+  elements+=OneOfElement*
   '}' (';')?;
 
 OneOfElement returns MessageElement:
-  Extensions | Group | MessageField;
+  Option | Extensions | Group | MessageField;
 
 Extensions:
-  ->'extensions' ranges+=IndexRange (',' ranges+=IndexRange)* (';')+;
+  ->'extensions' ranges+=IndexRange (',' ranges+=IndexRange)*
+  ('[' fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)* ']')? ';';
 
 MessageField:
-  (modifier=Modifier)? =>type=TypeLink name=Name '=' index=(LONG | HEX)
-  ('[' (fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)*)? ']')? (';')+;
+  (modifier=Modifier)? =>type=TypeLink name=Name '=' index=IndexNumber
+  ('[' (fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)*)? ']')? ';';
 
 TypeLink:
-  =>ScalarTypeLink | ComplexTypeLink | MapTypeLink;
+  =>ScalarTypeLink | =>MapTypeLink | ComplexTypeLink;
 
 ScalarTypeLink:
   target=ScalarType;
@@ -111,18 +113,30 @@ MapType:
 
 Enum:
   ->'enum' name=Name '{'
-  elements+=EnumElement*
+  (elements+=EnumElement | ';')*
   '}' ';'?;
 
 EnumElement:
   Option | Literal | ReservedEnum;
 
 Literal:
-  name=Name '=' index=(LONG | HEX)
-  ('[' fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)* ']')? (';')+;
+  name=Name '=' index=IndexNumber
+  ('[' fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)* ']')? ';';
 
-terminal HEX returns ecore::ELong:
-  ('-')? '0' ('x' | 'X') (DIGIT | 'a'..'f' | 'A'..'F')+;
+IndexNumber returns ecore::ELong:
+  '-'? (LONG | HEX);
+
+SignedLong returns ecore::EBigInteger:
+  '-'? LONG;
+
+SignedHex returns ecore::EBigInteger:
+  '-'? HEX;
+
+FloatingPointValue returns ecore::EDouble:
+  '-'? DOUBLE;
+
+terminal HEX:
+  '0' ('x' | 'X') (DIGIT | 'a'..'f' | 'A'..'F')+;
 
 TypeExtension:
   ->'extend' type=ExtensibleTypeLink '{'
@@ -136,18 +150,18 @@ ExtensibleType:
   Message | Group;
 
 Reserved:
-  'reserved' reservations+=Reservation (',' reservations+=Reservation)* ';'+;
+  'reserved' reservations+=Reservation (',' reservations+=Reservation)* ';';
 
 // quick hack so that reservations of enums embedded in messages does not interfere
 ReservedEnum:
-  'reserved' reservations+=Reservation (',' reservations+=Reservation)* ';'+;
+  'reserved' reservations+=Reservation (',' reservations+=Reservation)* ';';
 
 Reservation:
   IndexRange | StringLiteral;
 
 Service:
   ->'service' name=Name '{'
-  (elements+=ServiceElement)*
+  (elements+=ServiceElement | ';')*
   '}' (';')?;
 
 ServiceElement:
@@ -156,11 +170,11 @@ ServiceElement:
 Rpc:
   ->'rpc' name=Name '(' (=>isArgStreaming?='stream')? argType=MessageLink ')'
   'returns' '(' (=>isReturnStreaming?='stream')? returnType=MessageLink ')'
-  (('{' options+=Option* '}') (';')? | (';')+);
+  (('{' (options+=Option | ';')* '}') (';')? | ';');
 
 Stream:
   ->'stream' name=Name '(' clientMessage=MessageLink ',' serverMessage=MessageLink ')'
-  (('{' options+=Option* '}') (';')? | (';')+);
+  (('{' (options+=Option | ';')* '}') (';')? | ';');
 
 Name:
   IdOrReservedWord;
@@ -181,20 +195,24 @@ Option:
   NativeOption | CustomOption;
 
 NativeOption:
-  'option' source=OptionSource '=' value=Value (';')+;
+  'option' source=NativeOptionSource
+  ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value ';';
 
 CustomOption:
   'option' =>'(' source=OptionSource ')'
-  ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value (';')+;
+  ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value ';';
 
 FieldOption:
-  DefaultValueFieldOption | NativeFieldOption | CustomFieldOption;
+  DefaultValueFieldOption | JsonNameFieldOption | NativeFieldOption | CustomFieldOption;
 
 DefaultValueFieldOption:
   =>'default' '=' value=Value;
 
+JsonNameFieldOption:
+  =>'json_name' '=' value=Value;
+
 NativeFieldOption:
-  source=OptionSource '=' value=Value;
+  source=NativeOptionSource ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value;
 
 CustomFieldOption:
   ->'(' source=OptionSource ')'
@@ -202,6 +220,9 @@ CustomFieldOption:
 
 OptionSource:
   target=[IndexedElement|QualifiedName];
+
+NativeOptionSource returns OptionSource:
+  target=[IndexedElement|Name];
 
 OptionField:
   MessageOptionField | '(' ExtensionOptionField ')';
@@ -223,33 +244,47 @@ ComplexValue:
 
 // { foo: 1, bar: 2 }
 ComplexValueCurlyBracket:
-  '{' {ComplexValueCurlyBracket} (fields+=ValueField (',')?)* '}';
+  '{' {ComplexValueCurlyBracket} (fields+=ValueField (',' | ';')?)* '}';
 
 // < foo: 1, bar: 2 >
 ComplexValueAngleBracket:
-  '<' {ComplexValueAngleBracket} (fields+=ValueField (',')?)* '>';
+  '<' {ComplexValueAngleBracket} (fields+=ValueField (',' | ';')?)* '>';
 
 ValueField:
   ->SimpleValueField | ComplexValueField;
 
 SimpleValueField:
-  name=FieldName ':'
-  (values+=SimpleValueLink | '[' values+=SimpleValueLink (',' values+=SimpleValueLink)* ','? ']')
-  ';'?;
+  name=FieldName (hasColon?=':')?
+  (values+=SimpleValueLink | isList?='[' (values+=SimpleValueLink (',' values+=SimpleValueLink)* ','?)? ']');
 
 ComplexValueField:
-  name=FieldName ':'?
-  (values+=ComplexValue | '[' values+=ComplexValue (',' values+=ComplexValue)* ','? ']')
-  ';'?;
+  name=FieldName (hasColon?=':')?
+  (values+=ComplexValue | isList?='[' values+=ComplexValue (',' values+=ComplexValue)* ','? ']');
 
 FieldName:
-  NormalFieldName | ExtensionFieldName;
+  NormalFieldName | AnyFieldName | ExtensionFieldName;
 
 NormalFieldName:
   target=[IndexedElement|Name];
 
 ExtensionFieldName:
   '[' target=[IndexedElement|QualifiedName] ']';
+
+AnyFieldName:
+  =>('[' urlPrefix=AnyUrlPrefix) embeddedType=[Message|QualifiedName] ']';
+
+AnyUrlPrefix:
+  AnyUrlSegment '/' (=>AnyUrlPath)*;
+
+AnyUrlPath:
+  AnyUrlSegment '/';
+
+AnyUrlSegment:
+  (IdOrReservedWord | LONG | HEX | DOUBLE | '.' | '-' | '~' | '!' | '$' | '&' |
+    '(' | ')' | '*' | '+' | ',' | ';' | '=' | PERCENT_ENCODED)+;
+
+terminal PERCENT_ENCODED:
+  '%' (DIGIT | 'a'..'f' | 'A'..'F') (DIGIT | 'a'..'f' | 'A'..'F');
 
 QualifiedName:
   '.'? SafeId ('.' (WS)* SafeId)*;
@@ -275,11 +310,14 @@ SafeReservedWord:
   'fixed64' |
   'float' |
   'import' |
+  'inf' |
   'int32' |
   'int64' |
+  'json_name' |
   'map' |
   'max' |
   'message' |
+  'nan' |
   'option' |
   'optional' |
   'package' |
@@ -304,37 +342,30 @@ SafeReservedWord:
   'weak';
 
 SimpleValueLink:
-  LiteralLink | BooleanLink | NumberLink | StringLink;
+  LiteralLink | NumberLink | StringLink;
 
 LiteralLink:
-  target=[Literal];
-
-BooleanLink:
-  target=BOOL;
-
-enum BOOL:
-  TRUE = 'true' | FALSE = 'false';
+  (isNegative?='-')? target=[Literal|Name];
 
 NumberLink:
   HexNumberLink | =>LongLink | DoubleLink;
 
 HexNumberLink:
-  target=HEX;
+  target=SignedHex;
 
 LongLink:
-  target=LONG;
+  target=SignedLong;
 
-terminal LONG returns ecore::ELong:
-  ('-')? (DIGIT)+;
+terminal LONG:
+  DIGIT+;
 
 DoubleLink:
-  target=DOUBLE;
+  target=FloatingPointValue;
 
-terminal DOUBLE returns ecore::EDouble:
-  ('-')? (DIGIT)* ('.' (DIGIT)+)? |
-  ('-')? (DIGIT)+ ('.') |
-  ('-')? (DIGIT)+ ('.' (DIGIT)*)? (('e'|'E')('-'|'+')? (DIGIT)+) |
-  'nan' | 'inf' | '-inf';
+terminal DOUBLE:
+  ((DIGIT+ '.' DIGIT* | '.' DIGIT+) (('e' | 'E') ('-' | '+')? DIGIT+)? |
+    DIGIT+ ('e' | 'E') ('-' | '+')? DIGIT+) ('f' | 'F')? |
+  DIGIT+ ('f' | 'F');
 
 terminal fragment DIGIT:
   '0'..'9';
@@ -346,8 +377,8 @@ StringLiteral:
   chunks+=CHUNK+;
 
 terminal CHUNK:
-  '"' ('\\' . | !('\\' | '"'))* '"' |
-  "'" ('\\' . | !('\\' | "'"))* "'";
+  '"' ('\\' !('\u0000' | '\n' | '\r') | !('\\' | '"' | '\u0000' | '\n' | '\r'))* '"' |
+  "'" ('\\' !('\u0000' | '\n' | '\r') | !('\\' | "'" | '\u0000' | '\n' | '\r'))* "'";
 
 terminal ID: '^'?('a'..'z'|'A'..'Z'|'_') ('a'..'z'|'A'..'Z'|'_'|DIGIT)*;
 terminal ML_COMMENT: '/*' -> '*/';

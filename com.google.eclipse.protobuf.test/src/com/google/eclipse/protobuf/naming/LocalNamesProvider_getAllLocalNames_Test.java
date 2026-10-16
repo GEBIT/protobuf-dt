@@ -57,4 +57,19 @@ public class LocalNamesProvider_getAllLocalNames_Test {
     assertThat(names.get(3).toString(), equalTo("names.Person.PhoneNumber.PhoneType"));
     assertThat(names.get(4).toString(), equalTo("alternative.names.Person.PhoneNumber.PhoneType"));
   }
+
+  // syntax = "proto3";
+  // message M { oneof choice { string member = 1; } enum E { VALUE = 0; } }
+  @Test public void should_not_offer_obsolete_containment_aliases() {
+    List<QualifiedName> members = namesProvider.localNames(
+        xtext.find("member", com.google.eclipse.protobuf.protobuf.MessageField.class), normalNamingStrategy);
+    assertThat(members.get(0).toString(), equalTo("member"));
+    assertThat(members.get(1).toString(), equalTo("M.member"));
+    List<QualifiedName> literals = namesProvider.localNames(
+        xtext.find("VALUE", com.google.eclipse.protobuf.protobuf.Literal.class), normalNamingStrategy);
+    assertThat(literals.get(0).toString(), equalTo("VALUE"));
+    assertThat(literals.get(1).toString(), equalTo("M.VALUE"));
+    org.junit.Assert.assertEquals(2, members.size());
+    org.junit.Assert.assertEquals(2, literals.size());
+  }
 }

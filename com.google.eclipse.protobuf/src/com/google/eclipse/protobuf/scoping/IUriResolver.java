@@ -20,20 +20,20 @@ import org.eclipse.emf.common.util.URI;
 @ImplementedBy(NullUriResolver.class)
 public interface IUriResolver {
   /**
-   * Returns the resolved URI for the given URI.
+   * Returns the resolved URI for the given URI, or {@code null} if it cannot be resolved.
    *
    * @param importUri the URI to resolve
    * @param declaringResourceUri the resource the request is initiated from or {@code null}. If
    *        {@code null}, then the request is assumed to be from the top level
-   * @param project the project the request is originating from, or {@code null}. If {@code null},
-   *        try to resolve with the import paths of all projects in the workspace
+   * @param project the project the request is originating from, or {@code null} to use
+   *        workspace-default settings without selecting an unrelated project
    */
   String resolveUri(String importUri, URI declaringResourceUri, IProject project);
 
   class NullUriResolver implements IUriResolver {
     @Override
     public String resolveUri(String importUri, URI declaringResourceUri, IProject project) {
-      throw new UnsupportedOperationException();
+      return null;
     }
   }
 }

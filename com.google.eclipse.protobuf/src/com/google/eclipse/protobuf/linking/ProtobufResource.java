@@ -15,7 +15,7 @@ import java.util.Map;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.emf.ecore.EReference;
 import org.eclipse.xtext.diagnostics.DiagnosticMessage;
-import org.eclipse.xtext.linking.lazy.LazyLinkingResource;
+import org.eclipse.xtext.resource.DerivedStateAwareResource;
 import org.eclipse.xtext.nodemodel.INode;
 import org.eclipse.xtext.util.Triple;
 
@@ -25,7 +25,7 @@ import com.google.inject.Inject;
 /**
  * @author alruiz@google.com (Alex Ruiz)
  */
-public class ProtobufResource extends LazyLinkingResource {
+public class ProtobufResource extends DerivedStateAwareResource {
   @Inject private IResourceVerifier resourceVerifier;
 
   @Override
@@ -38,5 +38,10 @@ public class ProtobufResource extends LazyLinkingResource {
       return;
     }
     super.doLoad(inputStream, options);
+  }
+
+  @Override protected void doUnload() {
+    discardDerivedState();
+    super.doUnload();
   }
 }

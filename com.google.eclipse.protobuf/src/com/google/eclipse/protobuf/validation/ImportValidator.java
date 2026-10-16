@@ -122,6 +122,9 @@ public class ImportValidator extends AbstractDeclarativeValidator {
    */
   @Check
   public void checkUriIsResolved(Import anImport) {
+    if (imports.getPath(anImport) == null) {
+      return; // Literal diagnostics own malformed/incomplete paths.
+    }
     if (imports.isResolved(anImport)) {
       return;
     }

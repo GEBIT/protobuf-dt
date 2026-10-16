@@ -12,6 +12,7 @@ import com.google.eclipse.protobuf.ui.editor.FileOpener;
 import com.google.inject.Inject;
 
 import org.apache.log4j.Logger;
+import org.eclipse.core.resources.IProject;
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.jface.text.IRegion;
 import org.eclipse.jface.text.Region;
@@ -31,25 +32,30 @@ class ImportHyperlink implements IHyperlink {
 
   private URI importUri;
   private IRegion region;
+  private IProject originatingProject;
 
-  void update(URI uri, INode importUriNode) {
+  void update(URI uri, INode importUriNode, IProject originatingProject) {
     importUri = uri;
+    this.originatingProject = originatingProject;
     region = new Region(importUriNode.getOffset(), importUriNode.getLength());
   }
 
-  // TODO(alruiz): Test
   @Override public void open() {
     try {
+      if (importUri.isArchive()) {
+        fileOpener.openProtoFileInArchive(importUri, originatingProject);
+        return;
+      }
       if (importUri.isPlatformResource()) {
         fileOpener.openProtoFileInWorkspace(importUri);
         return;
       }
       if (importUri.isPlatformPlugin()) {
-        fileOpener.openProtoFileInPlugin(importUri);
+        fileOpener.openProtoFileInPlugin(importUri, originatingProject);
         return;
       }
       if (importUri.isFile()) {
-        fileOpener.openProtoFileInFileSystem(importUri);
+        fileOpener.openProtoFileInFileSystem(importUri, originatingProject);
       }
     } catch (PartInitException e) {
       logger.error("Unable to open " + importUri.toString(), e);

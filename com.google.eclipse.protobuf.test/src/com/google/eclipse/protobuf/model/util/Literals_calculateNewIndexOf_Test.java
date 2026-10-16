@@ -54,4 +54,37 @@ public class Literals_calculateNewIndexOf_Test {
     long index = literals.calculateNewIndexOf(work);
     assertThat(index, equalTo(6L));
   }
+
+  // syntax = "proto3";
+  // enum FirstProto3 { reserved 8; FIRST = 9; SECOND = 2; }
+  @Test public void should_propose_zero_for_first_proto3_literal() {
+    assertThat(literals.calculateNewIndexOf(xtext.find("FIRST", Literal.class)), equalTo(0L));
+  }
+
+  // syntax = "proto2";
+  // enum EnumGap { FIRST = 0; SECOND = 1; reserved 3 to max; }
+  @Test public void should_skip_enum_reserved_ranges_and_pending_assignment() {
+    Literal second = xtext.find("SECOND", Literal.class);
+    assertThat(literals.calculateNewIndexOf(second), equalTo(1L));
+    assertThat(literals.calculateNewIndexAfter(second, 1L), equalTo(2L));
+  }
+
+  // syntax = "proto2";
+  // enum NegativeGap { FIRST = 0; reserved 1 to max, -2147483648 to -2; }
+  @Test public void should_preserve_minus_one_as_a_valid_enum_proposal() {
+    Literal first = xtext.findFirst(Literal.class);
+    assertThat(literals.calculateNewIndexAfter(first, 0L), equalTo(-1L));
+  }
+
+  // syntax = "proto2";
+  // enum ExhaustedEnum { FIRST = 0; reserved -2147483648 to max; }
+  @Test public void should_use_outside_int32_sentinel_for_exhausted_enum_domain() {
+    assertThat(literals.calculateNewIndexOf(xtext.findFirst(Literal.class)), equalTo(Long.MIN_VALUE));
+  }
+
+  // syntax = "proto2";
+  // enum LastEnumNumber { FIRST = 2147483647; NEXT = 1; }
+  @Test public void should_find_a_gap_without_wrapping_enum_number() {
+    assertThat(literals.calculateNewIndexOf(xtext.find("NEXT", Literal.class)), equalTo(0L));
+  }
 }

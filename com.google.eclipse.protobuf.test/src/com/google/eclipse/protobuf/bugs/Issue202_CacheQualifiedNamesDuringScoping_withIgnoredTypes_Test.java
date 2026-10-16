@@ -31,7 +31,6 @@ import com.google.eclipse.protobuf.junit.core.XtextRule;
 import com.google.eclipse.protobuf.naming.IProtobufQualifiedNameProvider;
 import com.google.eclipse.protobuf.naming.NamingStrategy;
 import com.google.eclipse.protobuf.protobuf.AbstractOption;
-import com.google.eclipse.protobuf.protobuf.BooleanLink;
 import com.google.eclipse.protobuf.protobuf.ComplexValue;
 import com.google.eclipse.protobuf.protobuf.FieldName;
 import com.google.eclipse.protobuf.protobuf.Import;
@@ -55,7 +54,7 @@ public class Issue202_CacheQualifiedNamesDuringScoping_withIgnoredTypes_Test {
   public static Collection<Object[]> parameters() {
     return asList(new Object[][] {
         { Protobuf.class }, { Import.class }, { AbstractOption.class }, { OptionSource.class },
-        { ScalarTypeLink.class }, { NumberLink.class }, { BooleanLink.class }, { StringLink.class },
+        { ScalarTypeLink.class }, { NumberLink.class }, { StringLink.class },
         { ComplexValue.class }, { ValueField.class }, { FieldName.class }
       });
   }

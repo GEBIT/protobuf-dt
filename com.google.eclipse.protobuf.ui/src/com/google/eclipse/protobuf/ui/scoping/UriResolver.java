@@ -8,8 +8,6 @@
  */
 package com.google.eclipse.protobuf.ui.scoping;
 
-import static com.google.eclipse.protobuf.util.Workspaces.workspaceRoot;
-import static java.util.Collections.unmodifiableList;
 
 import java.lang.reflect.InvocationTargetException;
 
@@ -47,7 +45,6 @@ import org.eclipse.m2e.core.internal.project.registry.MavenRequiredCapability;
 import org.eclipse.m2e.core.internal.project.registry.ProjectRegistryManager;
 import org.eclipse.m2e.core.internal.project.registry.RequiredCapability;
 import org.eclipse.m2e.core.project.IMavenProjectFacade;
-import org.eclipse.xtext.ui.XtextProjectHelper;
 import org.eclipse.xtext.ui.editor.preferences.IPreferenceStoreAccess;
 
 import java.util.ArrayList;
@@ -71,7 +68,11 @@ public class UriResolver implements IUriResolver {
 
   private String resolveUriInternal(String importUri, URI declaringResourceUri, IProject project, boolean recursive) {
     if (project == null) {
-      return multipleDirectories.resolveUri(importUri, preferencesFromAllProjects());
+      PathsPreferences preferences = new PathsPreferences(storeAccess, null);
+      String resolved = preferences.areFilesInMultipleDirectories() || declaringResourceUri == null
+          ? null : singleDirectory.resolveUri(importUri, declaringResourceUri);
+      return resolved != null ? resolved : multipleDirectories.resolveUri(
+          importUri, ImmutableList.of(preferences));
     }
     PathsPreferences locations = new PathsPreferences(storeAccess, project);
     String resolvedUri = null;
@@ -179,16 +180,4 @@ public class UriResolver implements IUriResolver {
 	return null;
   }
 
-  private Iterable<PathsPreferences> preferencesFromAllProjects() {
-    List<PathsPreferences> allPreferences = new ArrayList<>();
-    IWorkspaceRoot root = workspaceRoot();
-    for (IProject project : root.getProjects()) {
-      if (project.isHidden() || !project.isAccessible() || !XtextProjectHelper.hasNature(project)) {
-        continue;
-      }
-      PathsPreferences preferences = new PathsPreferences(storeAccess, project);
-      allPreferences.add(preferences);
-    }
-    return unmodifiableList(allPreferences);
-  }
 }

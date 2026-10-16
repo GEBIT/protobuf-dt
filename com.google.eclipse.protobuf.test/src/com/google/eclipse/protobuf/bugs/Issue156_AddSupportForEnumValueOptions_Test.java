@@ -50,4 +50,25 @@ public class Issue156_AddSupportForEnumValueOptions_Test {
     IScope scope = scopeProvider.getScope(option.getSource(), OPTION_SOURCE__TARGET);
     assertThat(descriptionsIn(scope), contain("active"));
   }
+
+  @Test public void should_resolve_field_and_enum_value_feature_support_to_distinct_descriptor_fields() {
+    xtext.parseText("syntax='proto2'; import 'google/protobuf/descriptor.proto'; "
+        + "message M { optional bool field=1 [feature_support={edition_introduced:EDITION_2023}]; } "
+        + "enum E { E0=0 [feature_support={edition_introduced:EDITION_2023}]; }");
+    java.util.List<org.eclipse.xtext.validation.Issue> issues = xtext.injector()
+        .getInstance(org.eclipse.xtext.validation.IResourceValidator.class)
+        .validate(xtext.resource(), org.eclipse.xtext.validation.CheckMode.ALL, null);
+    org.junit.Assert.assertTrue(issues.toString(), issues.isEmpty());
+    java.util.List<com.google.eclipse.protobuf.protobuf.NativeFieldOption> annotations =
+        xtext.findAll(com.google.eclipse.protobuf.protobuf.NativeFieldOption.class);
+    org.junit.Assert.assertEquals(2, annotations.size());
+    org.eclipse.emf.ecore.EObject fieldSupport = annotations.get(0).getSource().getTarget();
+    org.eclipse.emf.ecore.EObject valueSupport = annotations.get(1).getSource().getTarget();
+    org.junit.Assert.assertNotSame(fieldSupport, valueSupport);
+    org.junit.Assert.assertEquals("FieldOptions",
+        ((com.google.eclipse.protobuf.protobuf.Message) fieldSupport.eContainer()).getName());
+    org.junit.Assert.assertEquals("EnumValueOptions",
+        ((com.google.eclipse.protobuf.protobuf.Message) valueSupport.eContainer()).getName());
+    org.junit.Assert.assertSame(fieldSupport.eResource(), valueSupport.eResource());
+  }
 }

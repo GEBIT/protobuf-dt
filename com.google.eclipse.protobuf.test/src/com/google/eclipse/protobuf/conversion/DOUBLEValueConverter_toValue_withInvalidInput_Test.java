@@ -65,4 +65,14 @@ public class DOUBLEValueConverter_toValue_withInvalidInput_Test {
       assertThat(e.getCause(), instanceOf(NumberFormatException.class));
     }
   }
+
+  @Test public void should_reject_named_special_value() {
+    thrown.expect(ValueConverterException.class);
+    converter.toValue("nan", node);
+  }
+
+  @Test public void should_reject_leading_plus() {
+    thrown.expect(ValueConverterException.class);
+    converter.toValue("+1.0", node);
+  }
 }

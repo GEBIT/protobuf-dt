@@ -10,6 +10,7 @@ package com.google.eclipse.protobuf.model.util;
 
 import static org.hamcrest.core.IsSame.sameInstance;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertNull;
 
 import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
@@ -40,5 +41,13 @@ public class ModelObjects_rootOf_Test {
   @Test public void should_return_root_of_proto() {
     MessageField field = xtext.find("name", MessageField.class);
     assertThat(modelObjects.rootOf(field), sameInstance(xtext.root()));
+  }
+
+  @Test public void should_return_null_for_null_or_detached_context() {
+    assertNull(modelObjects.rootOf(null));
+    assertNull(modelObjects.rootOf(com.google.eclipse.protobuf.protobuf.ProtobufFactory.eINSTANCE.createMessage()));
+    assertNull(modelObjects.rootOf(com.google.eclipse.protobuf.protobuf.ProtobufFactory.eINSTANCE.createProtobuf()));
+    assertNull(modelObjects.packageOf(null));
+    assertNull(modelObjects.packageOf(com.google.eclipse.protobuf.protobuf.ProtobufFactory.eINSTANCE.createMessage()));
   }
 }

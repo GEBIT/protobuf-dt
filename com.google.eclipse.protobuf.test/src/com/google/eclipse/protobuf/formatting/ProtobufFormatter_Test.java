@@ -155,6 +155,32 @@ public class ProtobufFormatter_Test {
     assertThatFormattingWorksCorrectly();
   }
 
+  // syntax="proto3";message Payload {} message Container {map < string , Payload > items=1;reserved 2 to 5;optional int32 count=6;oneof choice {Payload selected=7;}reserved 8 to max;}enum State {ZERO=0;reserved -2 to -1,7 to max;}
+
+  // syntax = "proto3";
+  //
+  // message Payload {
+  // }
+  //
+  // message Container {
+  //   map<string, Payload> items = 1;
+  //   reserved 2 to 5;
+  //   optional int32 count = 6;
+  //   oneof choice {
+  //     Payload selected = 7;
+  //   }
+  //
+  //   reserved 8 to max;
+  // }
+  //
+  // enum State {
+  //   ZERO = 0;
+  //   reserved -2 to -1, 7 to max;
+  // }
+  @Test public void should_format_maps_presence_oneofs_and_reservations() {
+    assertThatFormattingWorksCorrectly();
+  }
+
   // syntax = "proto" // version on next line
   //          '3';
 

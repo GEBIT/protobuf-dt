@@ -17,6 +17,8 @@ import org.eclipse.emf.ecore.EReference;
 import com.google.eclipse.protobuf.model.util.Imports;
 import com.google.eclipse.protobuf.protobuf.Import;
 import com.google.eclipse.protobuf.scoping.IImportResolver;
+import com.google.eclipse.protobuf.scoping.ProtoDescriptorProvider;
+import com.google.eclipse.protobuf.util.Uris;
 import com.google.inject.Inject;
 
 /**
@@ -39,13 +41,22 @@ public class IntegrationTestModule extends AbstractTestModule {
 
   private static class ImportResolver implements IImportResolver {
     @Inject private Imports imports;
+    @Inject private ProtoDescriptorProvider descriptors;
+    @Inject private Uris uris;
 
     @Override
     public String resolve(Import anImport) {
       String importUri = imports.getPath(anImport);
+      if (importUri == null) {
+        return null;
+      }
+      URI descriptor = descriptors.descriptorLocation(anImport.eResource(), importUri);
+      if (descriptor != null) {
+        return uris.referredResourceExists(descriptor) ? descriptor.toString() : null;
+      }
       URI uri = URI.createURI(importUri);
       if (!isEmpty(uri.scheme())) {
-        return importUri; // already resolved.
+        return uris.referredResourceExists(uri) ? importUri : null;
       }
       File file = protoFile(importUri);
       if (!file.exists()) {

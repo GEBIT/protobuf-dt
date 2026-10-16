@@ -17,6 +17,7 @@ import static org.mockito.Mockito.mock;
 import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
 
+import java.math.BigInteger;
 import java.util.Collection;
 
 import org.eclipse.xtext.nodemodel.INode;
@@ -39,22 +40,24 @@ public class HEXValueConverter_toValue_Test {
   @Rule public XtextRule xtext = overrideRuntimeModuleWith(unitTestModule());
 
   private final String input;
-  private final Long expected;
+  private final BigInteger expected;
 
   @Parameters
   public static Collection<Object[]> parameters() {
     return asList(new Object[][] {
-      { "0x1", 1L },
-      { "0xA", 10L },
-      { "0xFF", 255L },
-      { "-0x80000000", -2147483648L },
-      { "0xffffffffffffffff", 1L } // overflow
+      { "0x1", "1" },
+      { "0xA", "10" },
+      { "0xFF", "255" },
+      { "-0x80000000", "-2147483648" },
+      { "0xffffffffffffffff", "18446744073709551615" },
+      { "0x10000000000000000", "18446744073709551616" },
+      { "-0xffffffffffffffff", "-18446744073709551615" }
     });
   }
 
-  public HEXValueConverter_toValue_Test(String input, Long expected) {
+  public HEXValueConverter_toValue_Test(String input, String expected) {
     this.input = input;
-    this.expected = expected;
+    this.expected = new BigInteger(expected);
   }
 
   private HEXValueConverter converter;
@@ -66,7 +69,7 @@ public class HEXValueConverter_toValue_Test {
   }
 
   @Test public void should_parse_hexadecimal_number() {
-    Long value = converter.toValue(input, node);
+    BigInteger value = converter.toValue(input, node);
     assertThat(value, equalTo(expected));
   }
 }

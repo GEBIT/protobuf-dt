@@ -14,11 +14,11 @@ import static com.google.common.collect.Lists.newArrayList;
 
 import java.util.List;
 
-import com.google.eclipse.protobuf.parser.UnknownSyntaxProtobuf;
 import com.google.eclipse.protobuf.protobuf.Import;
 import com.google.eclipse.protobuf.protobuf.Protobuf;
 import com.google.eclipse.protobuf.protobuf.ProtobufElement;
 import com.google.eclipse.protobuf.protobuf.PublicImport;
+import com.google.inject.Inject;
 import com.google.inject.Singleton;
 
 /**
@@ -27,15 +27,15 @@ import com.google.inject.Singleton;
  * @author alruiz@google.com (Alex Ruiz)
  */
 @Singleton public class Protobufs {
+  @Inject private Syntaxes syntaxes;
   /**
    * Indicates whether the given root is not {@code null} and has a known syntax.
    *
    * @param protobuf the given root.
-   * @return {@code true} if the given root is not {@code null} and has a syntax element,
-   *         {@code false} otherwise.
+   * @return whether the attached root uses supported proto2 or proto3 syntax, including default proto2.
    */
   public boolean hasKnownSyntax(Protobuf protobuf) {
-    return protobuf != null && !(protobuf instanceof UnknownSyntaxProtobuf);
+    return syntaxes.isProto2(protobuf) || syntaxes.isProto3(protobuf);
   }
 
   /**

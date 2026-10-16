@@ -119,7 +119,7 @@ public class ProtobufScopeProvider_scope_LiteralLink_target_Test {
   // syntax = "proto2";
   //
   //  message Person {
-  //    optional Type type = 1 [ctype = STRING];
+  //    optional string type = 1 [ctype = STRING];
   //  }
   @Test public void should_provide_Literals_for_source_of_native_field_option() {
     FieldOption option = xtext.find("ctype", FieldOption.class);
@@ -141,7 +141,7 @@ public class ProtobufScopeProvider_scope_LiteralLink_target_Test {
   // }
   //
   // message Person {
-  //   optional boolean active = 1 [(type) = ONE];
+  //   optional bool active = 1 [(type) = ONE];
   // }
   @Test public void should_provide_Literals_for_source_of_custom_field_option() {
     FieldOption option = xtext.find("type", ")", FieldOption.class);
@@ -167,7 +167,7 @@ public class ProtobufScopeProvider_scope_LiteralLink_target_Test {
   // }
   //
   // message Person {
-  //   optional boolean active = 1 [(info).type = ONE];
+  //   optional bool active = 1 [(info).type = ONE];
   // }
   @Test public void should_provide_Literals_for_source_of_field_in_custom_field_option() {
     FieldOption option = xtext.find("info", ")", FieldOption.class);
@@ -274,6 +274,33 @@ public class ProtobufScopeProvider_scope_LiteralLink_target_Test {
     DefaultValueFieldOption option = (DefaultValueFieldOption) field.getFieldOptions().get(0);
     IScope scope = scopeProvider.getScope(valueOf(option), LITERAL_LINK__TARGET);
     assertThat(descriptionsIn(scope), contain("SUCCESS"));
+  }
+
+  // syntax = "proto2";
+  // enum Keywords { true = 0; false = 1; inf = 2; nan = 3; }
+  // message M {
+  //   optional Keywords flag = 1 [default = true];
+  //   optional bool enabled = 2 [default = true];
+  //   optional Keywords special = 3 [default = inf];
+  //   optional double weight = 4 [default = -inf];
+  // }
+  @Test public void should_resolve_keyword_values_against_expected_enum_or_scalar() {
+    Enum enumeration = xtext.find("Keywords", " {", Enum.class);
+    Literal enumTrue = (Literal) enumeration.getElements().get(0);
+    Literal enumInf = (Literal) enumeration.getElements().get(2);
+    MessageField flag = xtext.find("flag", MessageField.class);
+    MessageField special = xtext.find("special", MessageField.class);
+    org.junit.Assert.assertSame(enumTrue, valueOf(flag.getFieldOptions().get(0)).getTarget());
+    org.junit.Assert.assertSame(enumInf, valueOf(special.getFieldOptions().get(0)).getTarget());
+    Literal boolTarget = valueOf(xtext.find("enabled", MessageField.class).getFieldOptions().get(0)).getTarget();
+    org.junit.Assert.assertTrue(boolTarget instanceof com.google.eclipse.protobuf.protobuf.BuiltinLiteral);
+    org.junit.Assert.assertSame(xtext.root(), boolTarget.eContainer());
+    org.junit.Assert.assertTrue(((com.google.eclipse.protobuf.protobuf.BuiltinLiteral) boolTarget).isBooleanValue());
+    LiteralLink floating = valueOf(xtext.find("weight", MessageField.class).getFieldOptions().get(0));
+    org.junit.Assert.assertTrue(floating.isIsNegative());
+    org.junit.Assert.assertTrue(floating.getTarget() instanceof com.google.eclipse.protobuf.protobuf.BuiltinLiteral);
+    org.junit.Assert.assertEquals(Double.POSITIVE_INFINITY,
+        ((com.google.eclipse.protobuf.protobuf.BuiltinLiteral) floating.getTarget()).getFloatingValue(), 0);
   }
 
   private static LiteralLink valueOf(FieldOption option) {

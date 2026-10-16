@@ -16,10 +16,8 @@ import com.google.eclipse.protobuf.protobuf.StringLiteral;
 import com.google.eclipse.protobuf.resource.ResourceSets;
 import com.google.eclipse.protobuf.scoping.IImportResolver;
 import com.google.eclipse.protobuf.scoping.ProtoDescriptorProvider;
-import com.google.eclipse.protobuf.util.EResources;
 import com.google.inject.Inject;
 
-import org.eclipse.core.resources.IProject;
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.resource.Resource;
 import org.eclipse.emf.ecore.resource.ResourceSet;
@@ -48,8 +46,7 @@ public class Imports {
     if (anImport == null) {
       return false;
     }
-    IProject project = EResources.getProjectOf(anImport.eResource());
-    URI descriptorLocation = descriptorProvider.descriptorLocation(project, getPath(anImport));
+    URI descriptorLocation = descriptorProvider.descriptorLocation(anImport.eResource(), getPath(anImport));
     return descriptorLocation != null;
   }
 
@@ -68,8 +65,7 @@ public class Imports {
       return false;
     }
     String importUri = getPath(anImport);
-    IProject project = EResources.getProjectOf(anImport.eResource());
-    for (URI locationUri : descriptorProvider.allDescriptorLocations(project)) {
+    for (URI locationUri : descriptorProvider.allDescriptorLocations(anImport.eResource())) {
       String location = locationUri.toString();
       if (location.equals(importUri)) {
         return true;
@@ -113,6 +109,9 @@ public class Imports {
    *     successfully resolved.
    */
   public URI resolvedUriOf(Import anImport) {
+    if (anImport == null || anImport.eResource() == null) {
+      return null;
+    }
     String resolvedUri = importResolver.resolve(anImport);
     if (isNullOrEmpty(resolvedUri)) {
       return null;
@@ -130,6 +129,9 @@ public class Imports {
    * if the {@code anImport.getPath()} is null.
    */
   public @Nullable String getPath(Import anImport) {
+    if (anImport == null) {
+      return null;
+    }
     StringLiteral path = anImport.getPath();
     if (path != null) {
       return stringLiterals.getCombinedString(path);

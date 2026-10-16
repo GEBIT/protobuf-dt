@@ -14,24 +14,14 @@ import static java.util.Collections.unmodifiableList;
 import static com.google.common.collect.Lists.newArrayList;
 import static com.google.eclipse.protobuf.util.Workspaces.workspaceRoot;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-import java.util.zip.ZipInputStream;
-
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
-import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspaceRoot;
-import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.emf.common.util.URI;
+import org.eclipse.emf.ecore.resource.URIConverter;
 
 import com.google.inject.Singleton;
 
@@ -59,17 +49,7 @@ import com.google.inject.Singleton;
     if (uri == null) {
       return false;
     }
-    if (uri.isFile()) {
-      File file = new File(uri.path());
-      return file.exists();
-    }
-    if (uri.isPlatformResource()) {
-      return referredFileExists(uri);
-    }
-    if (uri.isArchive()) {
-      return referredFileInArchiveExists(uri);
-    }
-    return false;
+    return URIConverter.INSTANCE.exists(uri, null);
   }
 
   /**
@@ -83,7 +63,7 @@ import com.google.inject.Singleton;
       return emptyList();
     }
     List<String> segments = newArrayList(originalSegments);
-    if (uri.isPlatformResource()) {
+    if (uri.isPlatformResource() || uri.isPlatformPlugin()) {
       segments.remove(0);
     }
     segments.remove(segments.size() - 1);
@@ -95,6 +75,7 @@ import com.google.inject.Singleton;
    * <ul>
    * <li>"platform:/resource", if the URI refers to a platform resource</li>
    * <li>"file:", if the URI refers to a file</li>
+   * <li>the platform-plugin or archive root prefix for bundled/archive members</li>
    * <li>an empty {@code String} otherwise</li>
    * </ul>
    * @param uri the given URI.
@@ -106,6 +87,12 @@ import com.google.inject.Singleton;
     }
     if (uri.isPlatformResource()) {
       return "platform:/resource";
+    }
+    if (uri.isPlatformPlugin()) {
+      return "platform:/plugin";
+    }
+    if (uri.isArchive()) {
+      return uri.scheme() + ":" + uri.authority();
     }
     return "";
   }
@@ -149,56 +136,6 @@ import com.google.inject.Singleton;
   }
   
   public boolean referredFileInArchiveExists(URI uri) {
-	  String authority = uri.authority();
-	  if (authority == null) {
-		  return false;
-	  }
-	  if (authority.endsWith("!")) {
-		  authority = authority.substring(0, authority.length() - 1);
-	  }
-	  if (authority.startsWith("file:")) {
-		  authority = authority.substring(5);
-	  }
-	  if (authority.startsWith("platform:/resource")) {
-		  authority = authority.substring(18);
-		  IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
-		  IResource res = root.findMember(authority);
-		  if (res != null) {
-			  authority = res.getLocation().toOSString();
-		  }
-	  }
-	  if (authority.startsWith("///")) {
-		  // For the Paths API the starting triple slashes must be removed, if there are any (sometimes on windows)
-		  authority = authority.substring(3);
-	  }
-	  
-	  String pathToSearch = uri.path();
-	  if (pathToSearch.startsWith("/")) {
-		  // Zip entries don't have a slash in the beginning
-		  pathToSearch = pathToSearch.substring(1);
-	  }
-	  ZipInputStream zip = null;
-	  try {
-		  zip = new ZipInputStream(Files.newInputStream(Paths.get(authority), StandardOpenOption.READ));
-		  ZipEntry entry = zip.getNextEntry();
-		  while(entry != null) {
-			  if (entry.getName().equals(pathToSearch)) {
-				  return true;
-			  }
-			  entry = zip.getNextEntry();
-		  }
-	  } catch(IOException e) {
-		  return false;
-	  } finally {
-		try {
-		  if(zip != null) {	  
-			  zip.close();
-		  }
-		} catch (IOException e2) {
-			// ignored
-		}
-	  }
-	  
-	  return false;
+    return uri != null && uri.isArchive() && URIConverter.INSTANCE.exists(uri, null);
   }
 }

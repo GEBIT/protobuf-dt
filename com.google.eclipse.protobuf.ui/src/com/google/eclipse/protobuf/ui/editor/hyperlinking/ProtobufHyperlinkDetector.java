@@ -13,6 +13,8 @@ import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.IMPO
 import com.google.eclipse.protobuf.model.util.INodes;
 import com.google.eclipse.protobuf.model.util.Imports;
 import com.google.eclipse.protobuf.protobuf.Import;
+import com.google.eclipse.protobuf.protobuf.BuiltinLiteral;
+import com.google.eclipse.protobuf.util.EResources;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 
@@ -52,6 +54,12 @@ public class ProtobufHyperlinkDetector extends DefaultHyperlinkDetector {
     }
     return document.readOnly(new IUnitOfWork<IHyperlink[], XtextResource>() {
       @Override public IHyperlink[] exec(XtextResource resource) {
+        if (resource == null) {
+          return NO_HYPERLINKS;
+        }
+        if (eObjectAtOffsetHelper.resolveCrossReferencedElementAt(resource, region.getOffset()) instanceof BuiltinLiteral) {
+          return NO_HYPERLINKS;
+        }
         return getHelper().createHyperlinksByOffset(resource, region.getOffset(), canShowMultipleHyperlinks);
       }
     });
@@ -60,8 +68,11 @@ public class ProtobufHyperlinkDetector extends DefaultHyperlinkDetector {
   private IHyperlink[] importHyperlinks(final IXtextDocument document, final IRegion region) {
     return document.readOnly(new IUnitOfWork<IHyperlink[], XtextResource>() {
       @Override public IHyperlink[] exec(XtextResource resource) {
+        if (resource == null) {
+          return NO_HYPERLINKS;
+        }
         EObject resolved = eObjectAtOffsetHelper.resolveElementAt(resource, region.getOffset());
-        if (resolved.eContainer() instanceof Import) {
+        if (resolved != null && resolved.eContainer() instanceof Import) {
           resolved = resolved.eContainer();
         }
         if (!(resolved instanceof Import)) {
@@ -72,11 +83,11 @@ public class ProtobufHyperlinkDetector extends DefaultHyperlinkDetector {
           return NO_HYPERLINKS;
         }
         INode importUriNode = nodes.firstNodeForFeature(anImport, IMPORT__PATH);
-        if (importUriNode.getLength() == 0) {
+        if (importUriNode == null || importUriNode.getLength() == 0) {
           return NO_HYPERLINKS;
         }
         ImportHyperlink hyperlink = importHyperlinkProvider.get();
-        hyperlink.update(imports.resolvedUriOf(anImport), importUriNode);
+        hyperlink.update(imports.resolvedUriOf(anImport), importUriNode, EResources.getProjectOf(resource));
         return new IHyperlink[] { hyperlink };
       }
     });

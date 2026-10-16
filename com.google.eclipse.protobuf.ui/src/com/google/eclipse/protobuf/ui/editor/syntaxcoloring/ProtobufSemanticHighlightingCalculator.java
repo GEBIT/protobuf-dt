@@ -11,11 +11,13 @@ package com.google.eclipse.protobuf.ui.editor.syntaxcoloring;
 
 import static org.eclipse.xtext.ui.editor.syntaxcoloring.DefaultHighlightingConfiguration.DEFAULT_ID;
 import static org.eclipse.xtext.ui.editor.syntaxcoloring.DefaultHighlightingConfiguration.NUMBER_ID;
+import static org.eclipse.xtext.ui.editor.syntaxcoloring.DefaultHighlightingConfiguration.KEYWORD_ID;
+import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.ANY_FIELD_NAME__EMBEDDED_TYPE;
+import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.COMPLEX_TYPE_LINK__TARGET;
+import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.LITERAL_LINK__TARGET;
 
-import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.ABSTRACT_OPTION__VALUE;
-import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.LITERAL__INDEX;
-import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.MESSAGE_FIELD__TYPE;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.OPTION__SOURCE;
+import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.LITERAL__INDEX;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.RPC__ARG_TYPE;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.RPC__RETURN_TYPE;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.TYPE_EXTENSION__TYPE;
@@ -36,6 +38,7 @@ import org.eclipse.emf.common.util.EList;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.emf.ecore.EStructuralFeature;
 import org.eclipse.xtext.ide.editor.syntaxcoloring.IHighlightedPositionAcceptor;
+import org.eclipse.xtext.nodemodel.util.NodeModelUtils;
 import org.eclipse.xtext.ide.editor.syntaxcoloring.ISemanticHighlightingCalculator;
 import org.eclipse.xtext.nodemodel.INode;
 import org.eclipse.xtext.resource.XtextResource;
@@ -44,6 +47,12 @@ import org.eclipse.xtext.util.CancelIndicator;
 import com.google.eclipse.protobuf.model.util.INodes;
 import com.google.eclipse.protobuf.model.util.IndexedElements;
 import com.google.eclipse.protobuf.model.util.Options;
+import com.google.eclipse.protobuf.protobuf.AnyFieldName;
+import com.google.eclipse.protobuf.protobuf.BuiltinLiteral;
+import com.google.eclipse.protobuf.protobuf.Extensions;
+import com.google.eclipse.protobuf.protobuf.MapType;
+import com.google.eclipse.protobuf.protobuf.MapTypeLink;
+import com.google.eclipse.protobuf.protobuf.OneOf;
 import com.google.eclipse.protobuf.protobuf.ComplexType;
 import com.google.eclipse.protobuf.protobuf.ComplexTypeLink;
 import com.google.eclipse.protobuf.protobuf.Enum;
@@ -157,6 +166,19 @@ public class ProtobufSemanticHighlightingCalculator implements ISemanticHighligh
     }
     if (element instanceof TypeExtension) {
       highlight((TypeExtension) element, acceptor);
+      return;
+    }
+    if (element instanceof OneOf) {
+      for (MessageElement member : ((OneOf) element).getElements()) {
+        highlight(member, acceptor);
+      }
+      return;
+    }
+    if (element instanceof Extensions) {
+      for (FieldOption option : ((Extensions) element).getFieldOptions()) {
+        highlightValue(option.getValue(), acceptor);
+      }
+      return;
     }
   }
 
@@ -176,25 +198,14 @@ public class ProtobufSemanticHighlightingCalculator implements ISemanticHighligh
 
   private void highlightOptions(IndexedElement element, IHighlightedPositionAcceptor acceptor) {
     for (FieldOption option : indexedElements.fieldOptionsOf(element)) {
-      Value value = option.getValue();
-      if (value instanceof LiteralLink) {
-        highlightFirstFeature(option, ABSTRACT_OPTION__VALUE, acceptor, ENUM_LITERAL_ID);
-        return;
-      }
-      if (value instanceof NumberLink) {
-        highlightFirstFeature(option, ABSTRACT_OPTION__VALUE, acceptor, NUMBER_ID);
-      }
+      highlightValue(option.getValue(), acceptor);
     }
   }
 
   private void highlight(Group group, IHighlightedPositionAcceptor acceptor) {
     for (GroupElement e : group.getElements()) {
-      if (e instanceof IndexedElement) {
-        highlight((IndexedElement) e, acceptor);
-        continue;
-      }
-      if (e instanceof Enum) {
-        highlight((Enum) e, acceptor);
+      if (e instanceof MessageElement) {
+        highlight((MessageElement) e, acceptor);
       }
     }
   }
@@ -204,18 +215,23 @@ public class ProtobufSemanticHighlightingCalculator implements ISemanticHighligh
   }
 
   private void highlightPropertyType(MessageField field, IHighlightedPositionAcceptor acceptor) {
-    TypeLink link = field.getType();
-    if (!(link instanceof ComplexTypeLink)) {
-      return;
-    }
-    ComplexType type = ((ComplexTypeLink) link).getTarget();
-    if (type instanceof Message) {
-      highlightFirstFeature(field, MESSAGE_FIELD__TYPE, acceptor, MESSAGE_ID);
-      return;
-    }
-    if (type instanceof Enum) {
-      highlightFirstFeature(field, MESSAGE_FIELD__TYPE, acceptor, ENUM_ID);
-      return;
+    highlightType(field.getType(), acceptor);
+  }
+
+  private void highlightType(TypeLink link, IHighlightedPositionAcceptor acceptor) {
+    if (link instanceof MapTypeLink) {
+      MapType map = ((MapTypeLink) link).getTarget();
+      if (map != null) {
+        highlightType(map.getKeyType(), acceptor);
+        highlightType(map.getValueType(), acceptor);
+      }
+    } else if (link instanceof ComplexTypeLink) {
+      ComplexType target = ((ComplexTypeLink) link).getTarget();
+      if (target instanceof Message) {
+        highlightFirstFeature(link, COMPLEX_TYPE_LINK__TARGET, acceptor, MESSAGE_ID);
+      } else if (target instanceof Enum) {
+        highlightFirstFeature(link, COMPLEX_TYPE_LINK__TARGET, acceptor, ENUM_ID);
+      }
     }
   }
 
@@ -235,6 +251,9 @@ public class ProtobufSemanticHighlightingCalculator implements ISemanticHighligh
   private void highLight(Literal literal, IHighlightedPositionAcceptor acceptor) {
     highlightName(literal, acceptor, ENUM_LITERAL_DEFINITION);
     highlightFirstFeature(literal, LITERAL__INDEX, acceptor, ENUM_LITERAL_INDEX_ID);
+    for (FieldOption option : literal.getFieldOptions()) {
+      highlightValue(option.getValue(), acceptor);
+    }
   }
 
   private void highlight(Service service, IHighlightedPositionAcceptor acceptor) {
@@ -264,13 +283,33 @@ public class ProtobufSemanticHighlightingCalculator implements ISemanticHighligh
     if (element != null) {
       highlightFirstFeature(option, OPTION__SOURCE, acceptor, DEFAULT_ID);
     }
-    Value value = option.getValue();
-    if (value instanceof LiteralLink) {
-      highlightFirstFeature(option, ABSTRACT_OPTION__VALUE, acceptor, ENUM_LITERAL_ID);
+    highlightValue(option.getValue(), acceptor);
+  }
+
+  private void highlightValue(EObject value, IHighlightedPositionAcceptor acceptor) {
+    if (value == null) {
       return;
     }
-    if (value instanceof NumberLink) {
-      highlightFirstFeature(option, ABSTRACT_OPTION__VALUE, acceptor, NUMBER_ID);
+    if (value instanceof LiteralLink) {
+      Literal target = ((LiteralLink) value).getTarget();
+      if (target != null && !target.eIsProxy()) {
+        String style = ENUM_LITERAL_ID;
+        if (target instanceof BuiltinLiteral) {
+          String name = target.getName();
+          style = "true".equals(name) || "false".equals(name) ? KEYWORD_ID : NUMBER_ID;
+        }
+        highlightFirstFeature(value, LITERAL_LINK__TARGET, acceptor, style);
+      }
+    } else if (value instanceof NumberLink) {
+      INode node = NodeModelUtils.getNode(value);
+      if (node != null) {
+        acceptor.addPosition(node.getOffset(), node.getLength(), NUMBER_ID);
+      }
+    } else if (value instanceof AnyFieldName) {
+      highlightFirstFeature(value, ANY_FIELD_NAME__EMBEDDED_TYPE, acceptor, MESSAGE_ID);
+    }
+    for (EObject child : value.eContents()) {
+      highlightValue(child, acceptor);
     }
   }
 

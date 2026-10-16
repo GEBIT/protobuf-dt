@@ -170,17 +170,17 @@
   <!-- quickfix marker resolution generator -->
   <extension point="org.eclipse.ui.ide.markerResolution">
     <markerResolutionGenerator class="com.google.eclipse.protobuf.ui.ProtobufExecutableExtensionFactory:org.eclipse.xtext.ui.editor.quickfix.MarkerResolutionGenerator"
-      markerType="com.google.eclipse.protobuf.ui.protobuf.check.fast">
+      markerType="de.gebit.eclipse.protobuf.ui.protobuf.check.fast">
       <attribute name="FIXABLE_KEY" value="true">
       </attribute>
     </markerResolutionGenerator>
     <markerResolutionGenerator class="com.google.eclipse.protobuf.ui.ProtobufExecutableExtensionFactory:org.eclipse.xtext.ui.editor.quickfix.MarkerResolutionGenerator"
-      markerType="com.google.eclipse.protobuf.ui.protobuf.check.normal">
+      markerType="de.gebit.eclipse.protobuf.ui.protobuf.check.normal">
       <attribute name="FIXABLE_KEY" value="true">
       </attribute>
     </markerResolutionGenerator>
     <markerResolutionGenerator class="com.google.eclipse.protobuf.ui.ProtobufExecutableExtensionFactory:org.eclipse.xtext.ui.editor.quickfix.MarkerResolutionGenerator"
-      markerType="com.google.eclipse.protobuf.ui.protobuf.check.expensive">
+      markerType="de.gebit.eclipse.protobuf.ui.protobuf.check.expensive">
       <attribute name="FIXABLE_KEY" value="true">
       </attribute>
     </markerResolutionGenerator>

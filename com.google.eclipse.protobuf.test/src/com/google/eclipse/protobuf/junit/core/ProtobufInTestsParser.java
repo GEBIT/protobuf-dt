@@ -64,7 +64,10 @@ public class ProtobufInTestsParser {
   private XtextResource createResourceFrom(InputStream input, URI uri) {
     XtextResourceSet resourceSet = getInstanceOf(XtextResourceSet.class);
     resourceSet.setClasspathURIContext(getClass());
-    XtextResource resource = (XtextResource) getInstanceOf(IResourceFactory.class).createResource(uri);
+    IResourceFactory factory = getInstanceOf(IResourceFactory.class);
+    resourceSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put("proto", factory);
+    resourceSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put("protodevel", factory);
+    XtextResource resource = (XtextResource) factory.createResource(uri);
     resourceSet.getResources().add(resource);
     try {
       resource.load(input, null);

@@ -9,13 +9,22 @@
 package com.google.eclipse.protobuf.scoping;
 
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static com.google.eclipse.protobuf.junit.IEObjectDescriptions.descriptionsIn;
 import static com.google.eclipse.protobuf.junit.core.IntegrationTestModule.integrationTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
 import static com.google.eclipse.protobuf.junit.matchers.ContainNames.contain;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.OPTION_SOURCE__TARGET;
+
+import java.util.List;
+
 import org.eclipse.emf.ecore.EReference;
 import org.eclipse.xtext.scoping.IScope;
+import org.eclipse.xtext.naming.IQualifiedNameProvider;
+import org.eclipse.xtext.validation.CheckMode;
+import org.eclipse.xtext.validation.IResourceValidator;
+import org.eclipse.xtext.validation.Issue;
 import org.junit.Rule;
 import org.junit.Test;
 import com.google.eclipse.protobuf.junit.core.XtextRule;
@@ -34,6 +43,8 @@ public class ProtobufScopeProvider_scope_OptionSource_target_Test {
   @Rule public XtextRule xtext = overrideRuntimeModuleWith(integrationTestModule());
 
   @Inject private ProtobufScopeProvider scopeProvider;
+  @Inject private IResourceValidator validator;
+  @Inject private IQualifiedNameProvider qualifiedNames;
 
   // syntax = "proto2";
   //
@@ -42,20 +53,18 @@ public class ProtobufScopeProvider_scope_OptionSource_target_Test {
     Option option = xtext.find("optimize_for", Option.class);
     IScope scope = scopeProvider.getScope(option.getSource(), OPTION_SOURCE__TARGET);
     assertThat(descriptionsIn(scope), contain("java_package", "java_outer_classname",
-        "java_multiple_files", "java_generate_equals_and_hash", "optimize_for",
-        "cc_generic_services", "java_generic_services", "py_generic_services"));
+        "java_multiple_files", "optimize_for", "cc_generic_services", "java_generic_services"));
   }
 
   // syntax = "proto2";
   //
   // message Person {
-  //   optional Type type = 1 [ctype = STRING];
+  //   optional string type = 1 [ctype = STRING];
   // }
   @Test public void should_provide_sources_for_native_field_option() {
     NativeFieldOption option = xtext.find("ctype", NativeFieldOption.class);
     IScope scope = scopeProvider.getScope(option.getSource(), OPTION_SOURCE__TARGET);
-    assertThat(descriptionsIn(scope), contain("ctype", "packed", "deprecated",
-        "experimental_map_key"));
+    assertThat(descriptionsIn(scope), contain("ctype", "packed", "deprecated"));
   }
 
   // syntax = "proto2";
@@ -75,6 +84,7 @@ public class ProtobufScopeProvider_scope_OptionSource_target_Test {
     assertThat(descriptionsIn(scope), contain("code", "proto.code", "google.proto.code",
         "com.google.proto.code", "info", "proto.info", "google.proto.info",
         "com.google.proto.info"));
+    assertValidResolvedTarget(option.getSource(), "com.google.proto.code");
   }
 
   // // Create file custom-options.proto
@@ -98,6 +108,7 @@ public class ProtobufScopeProvider_scope_OptionSource_target_Test {
     Option option = xtext.find("code", ")", Option.class);
     IScope scope = scopeProvider.getScope(option.getSource(), OPTION_SOURCE__TARGET);
     assertThat(descriptionsIn(scope), contain("test.proto.code", "test.proto.info"));
+    assertValidResolvedTarget(option.getSource(), "test.proto.code");
   }
 
   // // Create file custom-options.proto
@@ -123,6 +134,7 @@ public class ProtobufScopeProvider_scope_OptionSource_target_Test {
     assertThat(descriptionsIn(scope), contain("code", "proto.code", "google.proto.code",
         "com.google.proto.code", "info", "proto.info", "google.proto.info",
         "com.google.proto.info"));
+    assertValidResolvedTarget(option.getSource(), "com.google.proto.code");
   }
 
   // syntax = "proto2";
@@ -135,7 +147,7 @@ public class ProtobufScopeProvider_scope_OptionSource_target_Test {
   // }
   //
   // message Person {
-  //   optional boolean active = 1 [(code) = 68];
+  //   optional bool active = 1 [(code) = 68];
   // }
   @Test public void should_provide_sources_for_custom_field_option() {
     CustomFieldOption option = xtext.find("code", ")", CustomFieldOption.class);
@@ -143,5 +155,13 @@ public class ProtobufScopeProvider_scope_OptionSource_target_Test {
     assertThat(descriptionsIn(scope), contain("code", "proto.code", "google.proto.code",
         "com.google.proto.code", "info", "proto.info", "google.proto.info",
         "com.google.proto.info"));
+    assertValidResolvedTarget(option.getSource(), "com.google.proto.code");
+  }
+
+  private void assertValidResolvedTarget(OptionSource source, String qualifiedName) {
+    List<Issue> issues = validator.validate(xtext.resource(), CheckMode.ALL, null);
+    assertTrue(issues.toString(), issues.isEmpty());
+    assertTrue(source.getTarget() != null && !source.getTarget().eIsProxy());
+    assertEquals(qualifiedName, qualifiedNames.getFullyQualifiedName(source.getTarget()).toString());
   }
 }

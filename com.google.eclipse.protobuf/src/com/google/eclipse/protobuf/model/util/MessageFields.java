@@ -25,6 +25,13 @@ import static com.google.eclipse.protobuf.grammar.CommonKeyword.UINT32;
 import static com.google.eclipse.protobuf.grammar.CommonKeyword.UINT64;
 import static com.google.eclipse.protobuf.protobuf.ModifierEnum.OPTIONAL;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import org.eclipse.xtext.util.IResourceScopeCache;
+import org.eclipse.xtext.util.Tuples;
+
 import com.google.eclipse.protobuf.grammar.CommonKeyword;
 import com.google.eclipse.protobuf.protobuf.ComplexType;
 import com.google.eclipse.protobuf.protobuf.ComplexTypeLink;
@@ -33,10 +40,14 @@ import com.google.eclipse.protobuf.protobuf.MapType;
 import com.google.eclipse.protobuf.protobuf.MapTypeLink;
 import com.google.eclipse.protobuf.protobuf.Message;
 import com.google.eclipse.protobuf.protobuf.MessageField;
+import com.google.eclipse.protobuf.protobuf.MessageElement;
 import com.google.eclipse.protobuf.protobuf.ModifierEnum;
+import com.google.eclipse.protobuf.protobuf.OneOf;
 import com.google.eclipse.protobuf.protobuf.ScalarType;
 import com.google.eclipse.protobuf.protobuf.ScalarTypeLink;
 import com.google.eclipse.protobuf.protobuf.TypeLink;
+import com.google.inject.Inject;
+import com.google.inject.Provider;
 import com.google.inject.Singleton;
 
 /**
@@ -46,6 +57,51 @@ import com.google.inject.Singleton;
  */
 @Singleton
 public class MessageFields {
+  @Inject private Syntaxes syntaxes;
+  @Inject private final IResourceScopeCache cache = IResourceScopeCache.NullImpl.INSTANCE;
+
+  public boolean supportsExplicitDefault(MessageField field) {
+    if (field == null || !syntaxes.isProto2(field) || field.eContainer() instanceof OneOf
+        || (field.getModifier() != ModifierEnum.OPTIONAL && field.getModifier() != ModifierEnum.REQUIRED)) {
+      return false;
+    }
+    ScalarType scalar = scalarTypeOf(field);
+    Enum enumeration = enumTypeOf(field);
+    return scalar != null || (enumeration != null && !enumeration.eIsProxy());
+  }
+
+  public boolean isPackable(MessageField field) {
+    if (field == null || field.getModifier() != ModifierEnum.REPEATED) {
+      return false;
+    }
+    Enum enumeration = enumTypeOf(field);
+    return isPrimitive(field) || (enumeration != null && !enumeration.eIsProxy());
+  }
+
+  public List<MessageField> fieldsOf(final Message message) {
+    if (message == null) {
+      return Collections.emptyList();
+    }
+    Provider<List<MessageField>> fields = new Provider<List<MessageField>>() {
+      @Override public List<MessageField> get() {
+        List<MessageField> result = new ArrayList<MessageField>();
+        for (MessageElement element : message.getElements()) {
+          if (element instanceof MessageField) {
+            result.add((MessageField) element);
+          } else if (element instanceof OneOf) {
+            for (MessageElement member : ((OneOf) element).getElements()) {
+              if (member instanceof MessageField) {
+                result.add((MessageField) member);
+              }
+            }
+          }
+        }
+        return Collections.unmodifiableList(result);
+      }
+    };
+    return message.eResource() == null ? fields.get()
+        : cache.get(Tuples.pair(message, "ownedFields"), message.eResource(), fields);
+  }
   /**
    * Indicates whether the modifier of the given field is <code>{@link
    * ModifierEnum#OPTIONAL}</code>.
@@ -71,8 +127,8 @@ public class MessageFields {
     if (!(link instanceof ScalarTypeLink)) {
       return false;
     }
-    String typeName = ((ScalarTypeLink) link).getTarget().getName();
-    return !STRING.hasValue(typeName) && !BYTES.hasValue(typeName);
+    ScalarType scalar = ((ScalarTypeLink) link).getTarget();
+    return scalar != null && !STRING.hasValue(scalar.getName()) && !BYTES.hasValue(scalar.getName());
   }
 
   /**

@@ -12,10 +12,11 @@ import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeMo
 import static org.junit.Assert.assertTrue;
 
 import com.google.eclipse.protobuf.junit.core.XtextRule;
-import com.google.eclipse.protobuf.validation.ProtobufJavaValidator;
 import com.google.inject.Inject;
 
-import org.eclipse.emf.common.util.BasicDiagnostic;
+import org.eclipse.xtext.util.CancelIndicator;
+import org.eclipse.xtext.validation.CheckMode;
+import org.eclipse.xtext.validation.IResourceValidator;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -25,16 +26,25 @@ import org.junit.Test;
 public class MapSyntaxTest {
   @Rule public XtextRule xtext = overrideRuntimeModuleWith(unitTestModule());
 
-  @Inject private ProtobufJavaValidator validator;
+  @Inject private IResourceValidator validator;
 
   // syntax = "proto2";
   //
   // message Foo {
-  //   optional map<string, Bar> bar_map = 1;
+  //   map<string, Bar> bar_map = 1;
   // }
+  // message Bar { optional string value = 1; }
   @Test public void shouldAllowMapFields() {
-    boolean isValid = validator.validate(xtext.root(), new BasicDiagnostic(), null);
-    assertTrue(isValid);
+    assertTrue(validator.validate(xtext.root().eResource(), CheckMode.ALL,
+        CancelIndicator.NullImpl).isEmpty());
+  }
+
+  // syntax = "proto3";
+  // message Foo { map<string, Bar> bar_map = 1; }
+  // message Bar { string value = 1; }
+  @Test public void shouldAllowProto3MapFields() {
+    assertTrue(validator.validate(xtext.root().eResource(), CheckMode.ALL,
+        CancelIndicator.NullImpl).isEmpty());
   }
 
   // syntax = "proto2";
@@ -43,7 +53,7 @@ public class MapSyntaxTest {
   //   optional string map = 1;
   // }
   @Test public void shouldAllowFieldsNamedMap() {
-    boolean isValid = validator.validate(xtext.root(), new BasicDiagnostic(), null);
-    assertTrue(isValid);
+    assertTrue(validator.validate(xtext.root().eResource(), CheckMode.ALL,
+        CancelIndicator.NullImpl).isEmpty());
   }
 }

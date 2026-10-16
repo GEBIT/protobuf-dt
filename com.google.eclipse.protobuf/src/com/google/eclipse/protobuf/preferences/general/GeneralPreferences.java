@@ -18,28 +18,45 @@ import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.util.IPropertyChangeListener;
 import org.eclipse.xtext.ui.editor.preferences.IPreferenceStoreAccess;
 
-/** @author alruiz@google.com (Alex Ruiz) */
+/**
+ * Reads the currently effective workspace/project settings. Listeners observe both writable stores,
+ * including project-setting toggles; their owner must remove them when its lifecycle ends.
+ *
+ * @author alruiz@google.com (Alex Ruiz)
+ */
 public class GeneralPreferences {
-  private final IPreferenceStore store;
+  private final IPreferenceStore workspaceStore;
+  private final IPreferenceStore projectStore;
 
   public GeneralPreferences(IPreferenceStoreAccess storeAccess, IProject project) {
-    IPreferenceStore preferenceStore = storeAccess.getWritablePreferenceStore(project);
-    if (!preferenceStore.getBoolean(ENABLE_PROJECT_SETTINGS_PREFERENCE_NAME)) {
-      preferenceStore = storeAccess.getWritablePreferenceStore();
-    }
-    this.store = preferenceStore;
+    workspaceStore = storeAccess.getWritablePreferenceStore();
+    projectStore = project == null ? workspaceStore : storeAccess.getWritablePreferenceStore(project);
+  }
+
+  private IPreferenceStore effectiveStore() {
+    return projectStore.getBoolean(ENABLE_PROJECT_SETTINGS_PREFERENCE_NAME) ? projectStore : workspaceStore;
   }
 
   public boolean shouldValidateFilesOnActivation() {
-    return store.getBoolean(VALIDATE_FILES_ON_ACTIVATION);
+    return effectiveStore().getBoolean(VALIDATE_FILES_ON_ACTIVATION);
   }
 
   public String getDescriptorProtoPath() {
-    return store.getString(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+    return effectiveStore().getString(PreferenceNames.DESCRIPTOR_PROTO_PATH);
   }
 
   public void addPropertyChangeListener(IPropertyChangeListener listener) {
-    store.addPropertyChangeListener(listener);
+    workspaceStore.addPropertyChangeListener(listener);
+    if (projectStore != workspaceStore) {
+      projectStore.addPropertyChangeListener(listener);
+    }
+  }
+
+  public void removePropertyChangeListener(IPropertyChangeListener listener) {
+    workspaceStore.removePropertyChangeListener(listener);
+    if (projectStore != workspaceStore) {
+      projectStore.removePropertyChangeListener(listener);
+    }
   }
 
   public static class Initializer extends DefaultPreservingInitializer {

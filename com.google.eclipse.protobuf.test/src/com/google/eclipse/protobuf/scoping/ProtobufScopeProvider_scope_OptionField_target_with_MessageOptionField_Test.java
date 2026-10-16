@@ -9,6 +9,7 @@
 package com.google.eclipse.protobuf.scoping;
 
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 import static com.google.eclipse.protobuf.junit.IEObjectDescriptions.descriptionsIn;
 import static com.google.eclipse.protobuf.junit.core.IntegrationTestModule.integrationTestModule;
 import static com.google.eclipse.protobuf.junit.core.SearchOption.IGNORE_CASE;
@@ -16,9 +17,14 @@ import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeMo
 import static com.google.eclipse.protobuf.junit.matchers.ContainNames.contain;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.OPTION_FIELD__TARGET;
 
+import java.util.List;
+
 import org.eclipse.emf.common.util.EList;
 import org.eclipse.emf.ecore.EReference;
 import org.eclipse.xtext.scoping.IScope;
+import org.eclipse.xtext.validation.CheckMode;
+import org.eclipse.xtext.validation.IResourceValidator;
+import org.eclipse.xtext.validation.Issue;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -40,6 +46,7 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
   @Rule public XtextRule xtext = overrideRuntimeModuleWith(integrationTestModule());
 
   @Inject private ProtobufScopeProvider scopeProvider;
+  @Inject private IResourceValidator validator;
 
   // syntax = "proto2";
   //
@@ -60,6 +67,7 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
     MessageOptionField codeOptionField = (MessageOptionField) option.getFields().get(0);
     IScope scope = scopeProvider.getScope(codeOptionField, OPTION_FIELD__TARGET);
     assertThat(descriptionsIn(scope), contain("code", "name"));
+    assertValidResource();
   }
 
   // syntax = "proto2";
@@ -85,6 +93,7 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
     OptionField numberOptionField = (MessageOptionField) option.getFields().get(1);
     IScope scope = scopeProvider.getScope(numberOptionField, OPTION_FIELD__TARGET);
     assertThat(descriptionsIn(scope), contain("number"));
+    assertValidResource();
   }
 
   // syntax = "proto2";
@@ -104,6 +113,7 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
     MessageOptionField codeOptionField = (MessageOptionField) option.getFields().get(0);
     IScope scope = scopeProvider.getScope(codeOptionField, OPTION_FIELD__TARGET);
     assertThat(descriptionsIn(scope), contain("code", "name"));
+    assertValidResource();
   }
 
   // syntax = "proto2";
@@ -120,13 +130,14 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
   // }
   //
   // message Person {
-  //   optional boolean active = 1 [(type).code = 68];
+  //   optional bool active = 1 [(type).code = 68];
   // }
   @Test public void should_provide_message_fields_for_first_field_in_field_custom_option() {
     CustomFieldOption option = xtext.find("type", ")", CustomFieldOption.class);
     MessageOptionField codeOptionField = (MessageOptionField) option.getFields().get(0);
     IScope scope = scopeProvider.getScope(codeOptionField, OPTION_FIELD__TARGET);
     assertThat(descriptionsIn(scope), contain("code", "name"));
+    assertValidResource();
   }
 
   // syntax = "proto2";
@@ -147,13 +158,14 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
   // }
   //
   // message Person {
-  //   optional boolean active = 1 [(type).code.number = 68];
+  //   optional bool active = 1 [(type).code.number = 68];
   // }
   @Test public void should_provide_message_fields_for_field_in_field_custom_option() {
     CustomFieldOption option = xtext.find("type", ")", CustomFieldOption.class);
     MessageOptionField numberOptionField = (MessageOptionField) option.getFields().get(1);
     IScope scope = scopeProvider.getScope(numberOptionField, OPTION_FIELD__TARGET);
     assertThat(descriptionsIn(scope), contain("number"));
+    assertValidResource();
   }
 
   // syntax = "proto2";
@@ -168,7 +180,7 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
   // }
   //
   // message Person {
-  //   optional boolean active = 1 [(type).code = 68];
+  //   optional bool active = 1 [(type).code = 68];
   // }
   @Test public void should_provide_group_fields_for_first_field_in_field_custom_option() {
     MessageField messageField = xtext.find("active", MessageField.class);
@@ -177,6 +189,7 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
     OptionField codeOptionField = customFieldOption.getFields().get(0);
     IScope scope = scopeProvider.getScope(codeOptionField, OPTION_FIELD__TARGET);
     assertThat(descriptionsIn(scope), contain("code", "name"));
+    assertValidResource();
   }
 
   // syntax = "proto2";
@@ -186,7 +199,7 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
   // import 'google/protobuf/descriptor.proto';
   //
   // message Type {
-  //   bool foo = 1;
+  //   optional bool foo = 1;
   //   oneof choose_one {
   //     bool bar = 2;
   //     bool baz = 3;
@@ -205,6 +218,7 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
     MessageOptionField codeOptionField = (MessageOptionField) option.getFields().get(0);
     IScope scope = scopeProvider.getScope(codeOptionField, OPTION_FIELD__TARGET);
     assertThat(descriptionsIn(scope), contain("foo", "bar", "baz"));
+    assertValidResource();
   }
 
   // syntax = "proto2";
@@ -214,7 +228,7 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
   // import 'google/protobuf/descriptor.proto';
   //
   // message Type {
-  //   bool foo = 1;
+  //   optional bool foo = 1;
   //   oneof choose_one {
   //     bool bar = 2;
   //     bool baz = 3;
@@ -237,5 +251,11 @@ public class ProtobufScopeProvider_scope_OptionField_target_with_MessageOptionFi
     MessageOptionField codeOptionField = (MessageOptionField) option.getFields().get(0);
     IScope scope = scopeProvider.getScope(codeOptionField, OPTION_FIELD__TARGET);
     assertThat(descriptionsIn(scope), contain("foo", "bar", "baz", "qux", "quux"));
+    assertValidResource();
+  }
+
+  private void assertValidResource() {
+    List<Issue> issues = validator.validate(xtext.resource(), CheckMode.ALL, null);
+    assertTrue(issues.toString(), issues.isEmpty());
   }
 }

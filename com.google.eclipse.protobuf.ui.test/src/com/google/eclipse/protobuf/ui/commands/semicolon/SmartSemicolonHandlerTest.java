@@ -45,41 +45,6 @@ public class SmartSemicolonHandlerTest {
     assertThat(handler.determineNewIndex(incomplete), is(1L));
   }
 
-  // // ignore errors
-  // syntax = "proto2";
-  //
-  // message Message {
-  //   optional bool in_message = 2;
-  //   optional group outer_group = 4 {
-  //     optional bool in_outer_group = 5;
-  //     optional group inner_group = 3 {
-  //       optional bool in_inner_group = 1;
-  //       optional bool incomplete
-  //     }
-  //   }
-  // }
-  @Test public void shouldDetermineCorrectIndexInsideOfGroups() {
-    MessageField incomplete = xtext.find("incomplete", MessageField.class);
-    assertThat(handler.determineNewIndex(incomplete), is(6L));
-  }
-
-  // // ignore errors
-  // syntax = "proto2";
-  //
-  // message Message {
-  //   optional bool in_message = 2;
-  //   optional group outer_group = 4 {
-  //     optional bool in_outer_group = 5;
-  //     optional group inner_group = 3 {
-  //       optional bool in_inner_group = 1;
-  //     }
-  //   }
-  //   optional bool incomplete
-  // }
-  @Test public void shouldDetermineCorrectIndexOutsideOfGroups() {
-    MessageField incomplete = xtext.find("incomplete", MessageField.class);
-    assertThat(handler.determineNewIndex(incomplete), is(6L));
-  }
 
   // // ignore errors
   // syntax = "proto2";
@@ -296,4 +261,85 @@ public class SmartSemicolonHandlerTest {
 
     assertThat(commentEdit, is((ReplaceEdit) null));
   }
+  // // ignore errors
+  // syntax = "proto3";
+  // message Message {
+  //   string first = 1;
+  //   oneof choice { string second = 2; }
+  //   reserved 4 to max;
+  //   map<string, int32> incomplete
+  // }
+  @Test public void shouldApplyLegalMapTagAcrossOneofAndReservedRange() throws Exception {
+    MessageField incomplete = xtext.find("incomplete", MessageField.class);
+    long next = handler.determineNewIndex(incomplete);
+    org.eclipse.jface.text.Document document = new org.eclipse.jface.text.Document(xtext.text());
+    handler.completeWithIndex(NodeModelUtils.getNode(incomplete), next).apply(document);
+    xtext.resource().reparse(document.get());
+    org.junit.Assert.assertTrue(document.get().contains("incomplete = 3;"));
+    assertNoErrorsAfterEdit();
+  }
+
+  // // ignore errors
+  // syntax = "proto3";
+  // message Message {
+  //   string first = 1;
+  //   map<string, int32> second = 2;
+  //   reserved 4 to max;
+  //   oneof choice { string incomplete }
+  // }
+  @Test public void shouldApplyLegalOneofTagAcrossMapAndReservedRange() throws Exception {
+    MessageField incomplete = xtext.find("incomplete", MessageField.class);
+    org.eclipse.jface.text.Document document = new org.eclipse.jface.text.Document(xtext.text());
+    handler.completeWithIndex(NodeModelUtils.getNode(incomplete), handler.determineNewIndex(incomplete)).apply(document);
+    xtext.resource().reparse(document.get());
+    org.junit.Assert.assertTrue(document.get().contains("incomplete = 3;"));
+    assertNoErrorsAfterEdit();
+  }
+
+  // // ignore errors
+  // syntax = "proto3";
+  // message Message {
+  //   reserved 1 to max;
+  //   string incomplete
+  // }
+  @Test public void shouldNotGenerateAnExhaustedTag() {
+    MessageField incomplete = xtext.find("incomplete", MessageField.class);
+    assertThat(handler.determineNewIndex(incomplete), is(Long.MIN_VALUE));
+  }
+
+  // // ignore errors
+  // syntax = "proto2";
+  // message Outer {
+  //   optional group GroupValue = 4 {
+  //     optional bool outer_group_field = 5;
+  //     optional group Nested = 3 {
+  //       optional bool nested_field = 1;
+  //       optional bool inside
+  //     }
+  //   }
+  //   optional bool outside
+  // }
+  @Test public void shouldCompleteIndependentTagsInsideAndOutsideGroupBodies() throws Exception {
+    MessageField outside = xtext.find("outside", MessageField.class);
+    MessageField inside = xtext.find("inside", MessageField.class);
+    org.eclipse.text.edits.MultiTextEdit edits = new org.eclipse.text.edits.MultiTextEdit();
+    edits.addChild(handler.completeWithIndex(NodeModelUtils.getNode(outside), handler.determineNewIndex(outside)));
+    edits.addChild(handler.completeWithIndex(NodeModelUtils.getNode(inside), handler.determineNewIndex(inside)));
+    org.eclipse.jface.text.Document document = new org.eclipse.jface.text.Document(xtext.text());
+    edits.apply(document);
+    xtext.parseText(document.get());
+    assertThat(xtext.find("outside", MessageField.class).getIndex(), is(5L));
+    assertThat(xtext.find("inside", MessageField.class).getIndex(), is(2L));
+    assertNoErrorsAfterEdit();
+  }
+
+  private void assertNoErrorsAfterEdit() {
+    org.eclipse.xtext.validation.IResourceValidator validator =
+        xtext.injector().getInstance(org.eclipse.xtext.validation.IResourceValidator.class);
+    for (org.eclipse.xtext.validation.Issue issue : validator.validate(xtext.resource(),
+        org.eclipse.xtext.validation.CheckMode.ALL, org.eclipse.xtext.util.CancelIndicator.NullImpl)) {
+      org.junit.Assert.assertNotEquals(issue.toString(), org.eclipse.xtext.diagnostics.Severity.ERROR, issue.getSeverity());
+    }
+  }
+
 }

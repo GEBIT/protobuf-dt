@@ -1,0 +1,6 @@
+Bundled descriptor.proto and java_features.proto are verbatim members of
+com.google.protobuf:protobuf-java:4.36.2 (upstream v36.2).
+Upstream commit: 2c74169b34066ceb8ddb6b882fcb3fb32d737a55
+Source artifact SHA-256: 0773e72eaf375e1285df330575bfec5bda5da674d544d0e142a17f89c8f754da
+The accompanying LICENSE is the full upstream BSD redistribution notice.
+Other bundled well-known schemas and compiler/plugin.proto are intentionally unchanged.

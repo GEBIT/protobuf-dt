@@ -13,9 +13,9 @@ import static java.util.Collections.unmodifiableList;
 import static org.eclipse.xtext.util.Strings.isEmpty;
 
 import java.util.List;
+import java.util.Collections;
 
 import com.google.eclipse.protobuf.naming.NameResolver;
-import com.google.eclipse.protobuf.protobuf.AbstractCustomOption;
 import com.google.eclipse.protobuf.protobuf.AbstractOption;
 import com.google.eclipse.protobuf.protobuf.DefaultValueFieldOption;
 import com.google.eclipse.protobuf.protobuf.FieldOption;
@@ -45,9 +45,9 @@ import com.google.inject.Singleton;
   }
 
   @SuppressWarnings("unchecked")
-  public List<OptionField> fieldsOf(AbstractCustomOption option) {
+  public List<OptionField> fieldsOf(AbstractOption option) {
     List<OptionField> fields = modelObjects.valueOfFeature(option, "fields", List.class);
-    return unmodifiableList(fields);
+    return fields == null ? Collections.<OptionField>emptyList() : unmodifiableList(fields);
   }
 
   /**
@@ -85,12 +85,8 @@ import com.google.inject.Singleton;
    * @return the {@code IndexedElement} the given custom option is referring to, or {@code null} if it cannot be
    * found.
    */
-  public IndexedElement sourceOf(AbstractCustomOption option) {
-    IndexedElement e = sourceOfLastFieldIn(option);
-    if (e == null) {
-      e = rootSourceOf((AbstractOption) option);
-    }
-    return e;
+  public IndexedElement sourceOf(AbstractOption option) {
+    return fieldsOf(option).isEmpty() ? rootSourceOf(option) : sourceOfLastFieldIn(option);
   }
 
   /**
@@ -105,7 +101,7 @@ import com.google.inject.Singleton;
    * @return the last field of the given custom option is referring to, or {@code null} if one cannot be found.
    */
   @SuppressWarnings("unchecked")
-  public IndexedElement sourceOfLastFieldIn(AbstractCustomOption option) {
+  public IndexedElement sourceOfLastFieldIn(AbstractOption option) {
     List<OptionField> fields = modelObjects.valueOfFeature(option, "fields", List.class);
     if (fields == null || fields.isEmpty()) {
       return null;

@@ -28,10 +28,25 @@ import org.eclipse.swtbot.swt.finder.widgets.SWTBotShell;
 public class ProtobufBot extends SWTWorkbenchBot {
   private static final NullProgressMonitor NULL_MONITOR = new NullProgressMonitor();
 
+  public ProtobufBot() {
+    activateWorkbench();
+  }
+
+  private void activateWorkbench() {
+    runInUiThread(() -> {
+      org.eclipse.ui.IWorkbenchWindow window = org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow();
+      if (window == null) {
+        throw new IllegalStateException("The functional-test workbench has no window.");
+      }
+      window.getShell().forceActive();
+    });
+  }
+
   public void resetAll() throws CoreException {
     resetWorkbench();
     deleteProjects();
     closeWelcomeView();
+    activateWorkbench();
   }
 
   private void deleteProjects() throws CoreException {
@@ -47,6 +62,7 @@ public class ProtobufBot extends SWTWorkbenchBot {
   }
 
   public void createGeneralProject(String name) {
+    activateWorkbench();
     menu("File").menu("New").menu("Project...").click();
     SWTBotShell shell = shell("New Project");
     shell.activate();
@@ -54,6 +70,7 @@ public class ProtobufBot extends SWTWorkbenchBot {
     button("Next >").click();
     textWithLabel("Project name:").setText(name);
     button("Finish").click();
+    waitUntil(org.eclipse.swtbot.swt.finder.waits.Conditions.shellCloses(shell));
   }
 
   public SWTBotEclipseEditor createFileWithText(String name, String text) {
@@ -64,11 +81,13 @@ public class ProtobufBot extends SWTWorkbenchBot {
   }
 
   public SWTBotEclipseEditor createFile(String name) {
+    activateWorkbench();
     menu("File").menu("New").menu("File").click();
     SWTBotShell shell = shell("New File");
     shell.activate();
     textWithLabel("File name:").setText(name);
     button("Finish").click();
+    waitUntil(org.eclipse.swtbot.swt.finder.waits.Conditions.shellCloses(shell));
     return editorByTitle(name).toTextEditor();
   }
 
@@ -79,9 +98,11 @@ public class ProtobufBot extends SWTWorkbenchBot {
   }
 
   public void openPreferencePage(final String preferencePageId) {
+    activateWorkbench();
     runInUiThread(new Runnable() {
       @Override public void run() {
-        PreferenceDialog dialog = createPreferenceDialogOn(activeShell().widget, preferencePageId, null, null);
+        PreferenceDialog dialog = createPreferenceDialogOn(
+            org.eclipse.ui.PlatformUI.getWorkbench().getActiveWorkbenchWindow().getShell(), preferencePageId, null, null);
         dialog.setBlockOnOpen(false);
         dialog.open();
       }
@@ -89,6 +110,6 @@ public class ProtobufBot extends SWTWorkbenchBot {
   }
 
   public void runInUiThread(Runnable r) {
-    activeShell().display.syncExec(r);
+    org.eclipse.swt.widgets.Display.getDefault().syncExec(r);
   }
 }

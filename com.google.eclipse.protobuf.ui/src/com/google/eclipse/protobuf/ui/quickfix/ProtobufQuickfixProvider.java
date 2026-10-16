@@ -8,8 +8,6 @@
  */
 package com.google.eclipse.protobuf.ui.quickfix;
 
-import static com.google.eclipse.protobuf.protobuf.BOOL.FALSE;
-import static com.google.eclipse.protobuf.protobuf.BOOL.TRUE;
 import static com.google.eclipse.protobuf.ui.quickfix.Messages.changeValueDescription;
 import static com.google.eclipse.protobuf.ui.quickfix.Messages.changeValueLabel;
 import static com.google.eclipse.protobuf.ui.quickfix.Messages.regenerateTagNumberDescription;
@@ -22,6 +20,10 @@ import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.INVAL
 import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.MISSING_MODIFIER_ERROR;
 import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.MORE_THAN_ONE_PACKAGE_ERROR;
 import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.REQUIRED_IN_PROTO3_ERROR;
+import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.MAP_WITH_MODIFIER_ERROR;
+import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.ONEOF_FIELD_WITH_MODIFIER_ERROR;
+import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.PROTO3_DEFAULT_ERROR;
+import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.MESSAGE_FIELD__MODIFIER;
 import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.SYNTAX_IS_NOT_KNOWN_ERROR;
 import static org.eclipse.emf.ecore.util.EcoreUtil.remove;
 import static org.eclipse.xtext.nodemodel.util.NodeModelUtils.findActualNodeFor;
@@ -30,10 +32,12 @@ import com.google.eclipse.protobuf.grammar.CommonKeyword;
 import com.google.eclipse.protobuf.model.util.INodes;
 import com.google.eclipse.protobuf.model.util.IndexedElements;
 import com.google.eclipse.protobuf.model.util.Syntaxes;
+import com.google.eclipse.protobuf.model.util.OptionValues;
+import com.google.eclipse.protobuf.protobuf.AbstractOption;
+import com.google.eclipse.protobuf.protobuf.DefaultValueFieldOption;
 import com.google.eclipse.protobuf.naming.NameResolver;
-import com.google.eclipse.protobuf.protobuf.BOOL;
-import com.google.eclipse.protobuf.protobuf.BooleanLink;
-import com.google.eclipse.protobuf.protobuf.FieldOption;
+import com.google.eclipse.protobuf.protobuf.Literal;
+import com.google.eclipse.protobuf.protobuf.LiteralLink;
 import com.google.eclipse.protobuf.protobuf.IndexedElement;
 import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.eclipse.protobuf.protobuf.ModifierEnum;
@@ -49,6 +53,8 @@ import org.eclipse.emf.ecore.EObject;
 import org.eclipse.xtext.nodemodel.INode;
 import org.eclipse.xtext.resource.XtextResource;
 import org.eclipse.xtext.ui.editor.model.IXtextDocument;
+import org.eclipse.xtext.nodemodel.ILeafNode;
+import org.eclipse.xtext.ui.editor.model.edit.IModification;
 import org.eclipse.xtext.ui.editor.model.edit.IModificationContext;
 import org.eclipse.xtext.ui.editor.model.edit.ISemanticModification;
 import org.eclipse.xtext.ui.editor.quickfix.DefaultQuickfixProvider;
@@ -67,6 +73,7 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
   @Inject private NameResolver nameResolver;
   @Inject private INodes nodes;
   @Inject private Syntaxes syntaxes;
+  @Inject private OptionValues optionValues;
 
   @Fix(SYNTAX_IS_NOT_KNOWN_ERROR)
   public void changeSyntaxToProto2(Issue issue, IssueResolutionAcceptor acceptor) {
@@ -96,11 +103,17 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
 
   @Fix(INVALID_FIELD_TAG_NUMBER_ERROR)
   public void regenerateTagNumber(Issue issue, IssueResolutionAcceptor acceptor) {
+    IndexedElement invalid = element(issue, IndexedElement.class);
+    if (invalid == null || indexedElements.calculateNewIndexFor(invalid) == -1L) {
+      return;
+    }
     ISemanticModification modification = new ISemanticModification() {
       @Override public void apply(EObject element, IModificationContext context) throws Exception {
         IndexedElement e = (IndexedElement) element;
         long tagNumber = indexedElements.calculateNewIndexFor(e);
-        indexedElements.setIndexTo(e, tagNumber);
+        if (tagNumber != -1L) {
+          indexedElements.setIndexTo(e, tagNumber);
+        }
       }
     };
     acceptor.accept(issue, regenerateTagNumberLabel, regenerateTagNumberDescription, "field.gif", modification);
@@ -126,6 +139,10 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
 
   @Fix(MISSING_MODIFIER_ERROR)
   public void changeModifierToRequired(Issue issue, IssueResolutionAcceptor acceptor) {
+    MessageField field = element(issue, MessageField.class);
+    if (field == null || syntaxes.isProto3(field)) {
+      return;
+    }
     ISemanticModification modification = new ISemanticModification() {
       @Override
       public void apply(EObject element, IModificationContext context) throws Exception {
@@ -180,36 +197,114 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
     acceptor.accept(issue, label, description, ICON_FOR_CHANGE, modification);
   }
 
+  @Fix(MAP_WITH_MODIFIER_ERROR)
+  public void removeMapModifier(Issue issue, IssueResolutionAcceptor acceptor) {
+    removeModifier(issue, acceptor);
+  }
+
+  @Fix(ONEOF_FIELD_WITH_MODIFIER_ERROR)
+  public void removeOneofModifier(Issue issue, IssueResolutionAcceptor acceptor) {
+    removeModifier(issue, acceptor);
+  }
+
+  private void removeModifier(Issue issue, IssueResolutionAcceptor acceptor) {
+    MessageField field = element(issue, MessageField.class);
+    final INode node = field == null ? null : nodes.firstNodeForFeature(field, MESSAGE_FIELD__MODIFIER);
+    if (node == null) {
+      return;
+    }
+    acceptor.accept(issue, "Remove modifier", "Remove the forbidden field modifier.", "remove.gif",
+        new IModification() {
+          @Override public void apply(IModificationContext context) throws Exception {
+            IXtextDocument document = context.getXtextDocument();
+            int end = node.getEndOffset();
+            while (end < document.getLength() && Character.isWhitespace(document.getChar(end))) {
+              end++;
+            }
+            document.replace(node.getOffset(), end - node.getOffset(), "");
+          }
+        });
+  }
+
+  @Fix(PROTO3_DEFAULT_ERROR)
+  public void removeProto3Default(Issue issue, IssueResolutionAcceptor acceptor) {
+    DefaultValueFieldOption option = element(issue, DefaultValueFieldOption.class);
+    if (option == null || !(option.eContainer() instanceof MessageField)) {
+      return;
+    }
+    MessageField field = (MessageField) option.eContainer();
+    INode node = findActualNodeFor(option);
+    if (node == null) {
+      return;
+    }
+    int start = node.getOffset();
+    int end = node.getEndOffset();
+    int index = field.getFieldOptions().indexOf(option);
+    if (field.getFieldOptions().size() == 1) {
+      INode fieldNode = findActualNodeFor(field);
+      for (ILeafNode leaf : fieldNode.getLeafNodes()) {
+        if (!leaf.isHidden() && "[".equals(leaf.getText()) && leaf.getOffset() < node.getOffset()) {
+          start = leaf.getOffset();
+        }
+        if (!leaf.isHidden() && "]".equals(leaf.getText()) && leaf.getOffset() >= node.getEndOffset()) {
+          end = leaf.getEndOffset();
+          break;
+        }
+      }
+    } else if (index + 1 < field.getFieldOptions().size()) {
+      end = findActualNodeFor(field.getFieldOptions().get(index + 1)).getOffset();
+    } else {
+      start = findActualNodeFor(field.getFieldOptions().get(index - 1)).getEndOffset();
+    }
+    final int offset = start;
+    final int length = end - start;
+    acceptor.accept(issue, "Remove explicit default", "Remove the entire forbidden proto3 default option.",
+        "remove.gif", new IModification() {
+          @Override public void apply(IModificationContext context) throws Exception {
+            context.getXtextDocument().replace(offset, length, "");
+          }
+        });
+  }
+
   @Fix(EXPECTED_BOOL_ERROR)
   public void changeValueToTrue(Issue issue, IssueResolutionAcceptor acceptor) {
     EObject element = elementIn(issue);
-    if (element instanceof FieldOption) {
-      FieldOption option = (FieldOption) element;
-      changeValue(option, linkTo(TRUE), CommonKeyword.TRUE, issue, acceptor);
+    if (canReplaceValue(element)) {
+      AbstractOption option = (AbstractOption) element;
+      LiteralLink replacement = linkTo(true, option);
+      if (replacement != null) {
+        changeValue(option, replacement, CommonKeyword.TRUE, issue, acceptor);
+      }
     }
   }
 
   @Fix(EXPECTED_BOOL_ERROR)
   public void changeValueToFalse(Issue issue, IssueResolutionAcceptor acceptor) {
     EObject element = elementIn(issue);
-    if (element instanceof FieldOption) {
-      FieldOption option = (FieldOption) element;
-      changeValue(option, linkTo(FALSE), CommonKeyword.FALSE, issue, acceptor);
+    if (canReplaceValue(element)) {
+      AbstractOption option = (AbstractOption) element;
+      LiteralLink replacement = linkTo(false, option);
+      if (replacement != null) {
+        changeValue(option, replacement, CommonKeyword.FALSE, issue, acceptor);
+      }
     }
   }
 
-  // TODO rename BooleanLink to BoolLink
-  private BooleanLink linkTo(BOOL value) {
-    BooleanLink link = ProtobufFactory.eINSTANCE.createBooleanLink();
-    link.setTarget(value);
+  private LiteralLink linkTo(boolean value, EObject context) {
+    Literal target = optionValues.builtinBoolean(value, context);
+    if (target == null) {
+      return null;
+    }
+    LiteralLink link = ProtobufFactory.eINSTANCE.createLiteralLink();
+    link.setTarget(target);
     return link;
   }
 
   @Fix(EXPECTED_STRING_ERROR)
   public void changeValueToEmptyString(Issue issue, IssueResolutionAcceptor acceptor) {
     EObject element = elementIn(issue);
-    if (element instanceof FieldOption) {
-      FieldOption option = (FieldOption) element;
+    if (canReplaceValue(element)) {
+      AbstractOption option = (AbstractOption) element;
       String valueToPropose = "";
       changeValue(option, linkTo(valueToPropose), valueToPropose, issue, acceptor);
     }
@@ -218,12 +313,17 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
   private StringLink linkTo(String value) {
     StringLink link = ProtobufFactory.eINSTANCE.createStringLink();
     StringLiteral literal = ProtobufFactory.eINSTANCE.createStringLiteral();
-    literal.getChunks().add(value);
+    literal.getChunks().add(quote(value));
     link.setTarget(literal);
     return link;
   }
 
-  private void changeValue(final FieldOption option, final Value newValue, Object proposedValue, Issue issue,
+  private boolean canReplaceValue(EObject element) {
+    return element instanceof AbstractOption
+        && !(element instanceof DefaultValueFieldOption && syntaxes.isProto3(element));
+  }
+
+  private void changeValue(final AbstractOption option, final Value newValue, Object proposedValue, Issue issue,
       IssueResolutionAcceptor acceptor) {
     ISemanticModification modification = new ISemanticModification() {
       @Override public void apply(EObject element, IModificationContext context) throws Exception {

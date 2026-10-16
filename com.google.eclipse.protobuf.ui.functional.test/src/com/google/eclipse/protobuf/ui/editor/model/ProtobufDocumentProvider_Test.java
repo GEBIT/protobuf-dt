@@ -49,7 +49,7 @@ public class ProtobufDocumentProvider_Test {
   @Test public void should_remove_trailing_whitespace_in_edited_lines_only() {
     initEditor();
     preferences.removeTrailingWhitespace(EDITED_LINES);
-    editor.typeText("option optimize_for = SPEED;  ");
+    editor.insertText("option optimize_for = SPEED;  ");
     editor.save();
     MultiLineTextBuilder expected = new MultiLineTextBuilder();
     expected.append("syntax = 'proto2';  ")
@@ -61,7 +61,7 @@ public class ProtobufDocumentProvider_Test {
   @Test public void should_remove_trailing_whitespace_in_all_lines() {
     initEditor();
     preferences.removeTrailingWhitespace(ALL_LINES);
-    editor.typeText("option optimize_for = SPEED;  ");
+    editor.insertText("option optimize_for = SPEED;  ");
     editor.save();
     MultiLineTextBuilder expected = new MultiLineTextBuilder();
     expected.append("syntax = 'proto2';")

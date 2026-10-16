@@ -38,6 +38,7 @@ import com.google.eclipse.protobuf.ui.preferences.editor.save.SaveActionsPrefere
 import com.google.eclipse.protobuf.ui.preferences.misc.MiscellaneousPreferences;
 import com.google.eclipse.protobuf.ui.preferences.paths.PathsPreferences;
 import com.google.eclipse.protobuf.ui.resource.ProtobufServiceProvider;
+import com.google.eclipse.protobuf.ui.refactoring.ProtobufRenameStrategyProvider;
 import com.google.eclipse.protobuf.ui.resource.ResourceVerifier;
 import com.google.eclipse.protobuf.ui.scoping.ImportResolver;
 import com.google.eclipse.protobuf.ui.scoping.UriResolver;
@@ -59,6 +60,7 @@ import org.eclipse.xtext.ui.editor.outline.actions.IOutlineContribution;
 import org.eclipse.xtext.ui.editor.preferences.IPreferenceStoreInitializer;
 import org.eclipse.xtext.ui.editor.syntaxcoloring.AbstractAntlrTokenToAttributeIdMapper;
 import org.eclipse.xtext.ui.editor.syntaxcoloring.IHighlightingConfiguration;
+import org.eclipse.xtext.ui.refactoring.IRenameStrategy;
 import org.eclipse.xtext.ui.resource.IResourceSetProvider;
 import org.eclipse.xtext.ui.resource.SimpleResourceSetProvider;
 
@@ -70,6 +72,10 @@ import org.eclipse.xtext.ui.resource.SimpleResourceSetProvider;
 public class ProtobufUiModule extends AbstractProtobufUiModule {
   public ProtobufUiModule(AbstractUIPlugin plugin) {
     super(plugin);
+  }
+
+  public Class<? extends IRenameStrategy.Provider> bindIRenameStrategy$Provider() {
+    return ProtobufRenameStrategyProvider.class;
   }
 
   public Class<? extends IImportResolver> bindImportResolver() {

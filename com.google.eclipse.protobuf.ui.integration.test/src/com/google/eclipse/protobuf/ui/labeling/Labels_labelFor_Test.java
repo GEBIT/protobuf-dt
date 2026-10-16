@@ -163,6 +163,19 @@ public class Labels_labelFor_Test {
     assertThat(labelText.getString(), equalTo("PersonRpc : Person > Type"));
   }
 
+  @Test public void should_decorate_each_rpc_streaming_direction_independently() {
+    xtext.parseText("syntax = \"proto3\"; message Request {} message Reply {} service Api { "
+        + "rpc Unary(Request) returns (Reply); rpc Client(stream Request) returns (Reply); "
+        + "rpc Server(Request) returns (stream Reply); rpc Bidi(stream Request) returns (stream Reply); }");
+    String[] expected = {"Unary : Request > Reply", "Client : stream Request > Reply",
+        "Server : Request > stream Reply", "Bidi : stream Request > stream Reply"};
+    java.util.List<Rpc> methods = xtext.findAll(Rpc.class);
+    assertThat(methods.size(), equalTo(expected.length));
+    for (int i = 0; i < expected.length; i++) {
+      assertThat(((StyledString) labels.labelFor(methods.get(i))).getString(), equalTo(expected[i]));
+    }
+  }
+
   // syntax = "proto2";
   //
   // message Type {}

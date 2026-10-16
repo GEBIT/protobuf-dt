@@ -10,11 +10,13 @@ package com.google.eclipse.protobuf;
 
 import com.google.eclipse.protobuf.conversion.ProtobufTerminalConverters;
 import com.google.eclipse.protobuf.linking.ProtobufResource;
+import com.google.eclipse.protobuf.linking.ProtobufDerivedStateComputer;
 import com.google.eclipse.protobuf.naming.ProtobufQualifiedNameConverter;
 import com.google.eclipse.protobuf.naming.ProtobufQualifiedNameProvider;
 import com.google.eclipse.protobuf.resource.FastXtextResourceSet;
 import com.google.eclipse.protobuf.resource.GlobalResourceServiceProvider;
 import com.google.eclipse.protobuf.scoping.ExtensionRegistryProvider;
+import com.google.eclipse.protobuf.resource.ProtobufLocationInFileProvider;
 import com.google.eclipse.protobuf.scoping.ProtobufCaseInsensitivityHelper;
 import com.google.eclipse.protobuf.validation.ProtobufResourceValidator;
 import com.google.eclipse.protobuf.validation.ProtobufSyntaxErrorMessageProvider;
@@ -26,6 +28,10 @@ import org.eclipse.xtext.naming.IQualifiedNameConverter;
 import org.eclipse.xtext.naming.IQualifiedNameProvider;
 import org.eclipse.xtext.parser.antlr.ISyntaxErrorMessageProvider;
 import org.eclipse.xtext.resource.IGlobalServiceProvider;
+import org.eclipse.xtext.resource.ILocationInFileProvider;
+import org.eclipse.xtext.resource.IDerivedStateComputer;
+import org.eclipse.xtext.resource.IResourceDescription;
+import org.eclipse.xtext.resource.DerivedStateAwareResourceDescriptionManager;
 import org.eclipse.xtext.resource.XtextResource;
 import org.eclipse.xtext.resource.XtextResourceSet;
 import org.eclipse.xtext.scoping.ICaseInsensitivityHelper;
@@ -36,6 +42,18 @@ import org.eclipse.xtext.validation.IResourceValidator;
  * registry.
  */
 public class ProtobufRuntimeModule extends AbstractProtobufRuntimeModule {
+  public Class<? extends IDerivedStateComputer> bindIDerivedStateComputer() {
+    return ProtobufDerivedStateComputer.class;
+  }
+
+  public Class<? extends IResourceDescription.Manager> bindIResourceDescription$Manager() {
+    return DerivedStateAwareResourceDescriptionManager.class;
+  }
+
+  @Override public Class<? extends ILocationInFileProvider> bindILocationInFileProvider() {
+    return ProtobufLocationInFileProvider.class;
+  }
+
   public Class<? extends IGlobalServiceProvider> bindIGlobalServiceProvider() {
     return GlobalResourceServiceProvider.class;
   }

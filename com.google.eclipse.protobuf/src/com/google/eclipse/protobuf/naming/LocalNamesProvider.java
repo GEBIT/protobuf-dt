@@ -26,6 +26,13 @@ import org.eclipse.xtext.util.Pair;
 
 import com.google.eclipse.protobuf.model.util.ModelObjects;
 import com.google.eclipse.protobuf.model.util.Packages;
+import com.google.eclipse.protobuf.protobuf.BuiltinLiteral;
+import com.google.eclipse.protobuf.protobuf.MapType;
+import com.google.eclipse.protobuf.protobuf.MessageField;
+import com.google.eclipse.protobuf.protobuf.Enum;
+import com.google.eclipse.protobuf.protobuf.Literal;
+import com.google.eclipse.protobuf.protobuf.IndexedElement;
+import com.google.eclipse.protobuf.protobuf.OneOf;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 
@@ -75,6 +82,9 @@ public class LocalNamesProvider {
   @Inject private Packages packages;
 
   public List<QualifiedName> localNames(final EObject e, final NamingStrategy strategy) {
+    if (e == null || e instanceof BuiltinLiteral || e instanceof MessageField && e.eContainer() instanceof MapType) {
+      return emptyList();
+    }
     Pair<EObject, String> key = pair(e, "localFqns");
     Pair<NameType, List<QualifiedName>> cached = cache.get(key, e.eResource(),
         new Provider<Pair<NameType, List<QualifiedName>>>() {
@@ -89,6 +99,10 @@ public class LocalNamesProvider {
         allNames.add(qualifiedName);
         while (current.eContainer() != null) {
           current = current.eContainer();
+          if (e instanceof Literal && current instanceof Enum
+              || e instanceof IndexedElement && current instanceof OneOf) {
+            continue;
+          }
           String containerName = nameResolver.nameOf(current);
           if (isEmpty(containerName)) {
             continue;

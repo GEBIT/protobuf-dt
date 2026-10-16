@@ -8,6 +8,10 @@
  */
 package com.google.eclipse.protobuf.model.util;
 
+import org.eclipse.emf.ecore.EObject;
+
+import com.google.eclipse.protobuf.parser.UnknownSyntaxProtobuf;
+import com.google.eclipse.protobuf.protobuf.Protobuf;
 import com.google.eclipse.protobuf.protobuf.ProtobufFactory;
 import com.google.eclipse.protobuf.protobuf.StringLiteral;
 import com.google.eclipse.protobuf.protobuf.Syntax;
@@ -24,6 +28,20 @@ import com.google.inject.Singleton;
 
   @Inject
   private StringLiterals stringLiterals;
+
+  @Inject private ModelObjects modelObjects;
+
+  public boolean isProto2(EObject context) {
+    Protobuf root = modelObjects.rootOf(context);
+    return root != null && !(root instanceof UnknownSyntaxProtobuf)
+        && (root.getSyntax() == null || isSpecifyingProto2Syntax(root.getSyntax()));
+  }
+
+  public boolean isProto3(EObject context) {
+    Protobuf root = modelObjects.rootOf(context);
+    return root != null && !(root instanceof UnknownSyntaxProtobuf)
+        && isSpecifyingProto3Syntax(root.getSyntax());
+  }
 
   /**
    * Indicates whether the given {@code String} is equal to <code>{@link #PROTO2}</code>.
@@ -65,7 +83,7 @@ import com.google.inject.Singleton;
    * Returns the name of the syntax specified by this syntax element.
    */
   public String getName(Syntax s) {
-    return stringLiterals.getCombinedString(s.getName());
+    return s == null || s.getName() == null ? null : stringLiterals.getCombinedString(s.getName());
   }
 
   /**

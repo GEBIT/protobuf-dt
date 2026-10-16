@@ -65,9 +65,10 @@ Workflow {
 
       // The antlr parser generator fragment.
       fragment = parser.antlr.XtextAntlrGeneratorFragment {
-        // options = {
-        //  backtrack = true
-        // }
+        options = {
+          kAsString = "1"
+          backtrack = true
+        }
       }
 
       // Java-based API for validation
@@ -107,9 +108,10 @@ Workflow {
 
       // Generates a more lightweight Antlr parser and lexer tailored for content assist
       fragment = parser.antlr.XtextAntlrUiGeneratorFragment {
-        // options = {
-        //   backtrack = true
-        // }
+        options = {
+          kAsString = "1"
+          backtrack = true
+        }
       }
 
       // Project wizard (optional)

@@ -1,0 +1,26 @@
+Exact schema compatibility corpus
+
+Maven artifact: com.google.protobuf:protobuf-java:4.36.2
+Artifact SHA-256: 0773e72eaf375e1285df330575bfec5bda5da674d544d0e142a17f89c8f754da
+Upstream release: v36.2
+Upstream commit: 2c74169b34066ceb8ddb6b882fcb3fb32d737a55
+
+The twelve google/protobuf/*.proto files are verbatim archive members, with
+original headers preserved. No production protobuf-java dependency is added.
+LICENSE is the full upstream BSD notice from:
+https://raw.githubusercontent.com/protocolbuffers/protobuf/2c74169b34066ceb8ddb6b882fcb3fb32d737a55/LICENSE
+
+SHA-256  Archive member
+8e56f61e3078e9232d39ce1b1bab28613783af8191f93a910c3617933f87a179  google/protobuf/any.proto
+6d47d6272eb687c806b6feb08ef3925243c64ea076cd9440b783e27a7aec5502  google/protobuf/api.proto
+c96db5406336ebcc82523c1dfb122721986a1f43c4aaed45a4a4ad6996efacc2  google/protobuf/descriptor.proto
+a3f7301ff2956ec2e30c2241ece07197e4a86c752348d5607224819d4921c9fe  google/protobuf/duration.proto
+ecef3d54cc9e079673b9816c67bac770f7f3bf6dada2d4596ba69d71daa971e6  google/protobuf/empty.proto
+9f031219ae54383afa84299fdd747e119b5f83c8e3dab060930ebb126af4460f  google/protobuf/field_mask.proto
+ac0253f236f9392a9c71c1b21297bc7ca892496ed550b12c93d0a4ae8e4120df  google/protobuf/java_features.proto
+37d3401de89af1d1496fc949924a5f2011bd2fadfbeb0da1caa277159a96776d  google/protobuf/source_context.proto
+85d5dd93079588f3fa33b5affe431223de4036f66ffb76253efe930bc2d39696  google/protobuf/struct.proto
+fa6c44dca2c90a2aaf3a1e4776cef2e9177f70fba365f236269f0f41ac166c96  google/protobuf/timestamp.proto
+50a3b67b4d894e828173319aafcd6ac440c15340048452bd13a13e8b47cc6637  google/protobuf/type.proto
+6878dc7534cf9805eee56345cdc38b5e9ca39dece246710c663c7007a67fef49  google/protobuf/wrappers.proto
+6e5e117324afd944dcf67f36cf329843bc1a92229a8cd9bb573d7a83130fea7d  LICENSE

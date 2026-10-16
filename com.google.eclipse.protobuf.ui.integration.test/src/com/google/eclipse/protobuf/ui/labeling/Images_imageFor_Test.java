@@ -29,6 +29,7 @@ import com.google.eclipse.protobuf.protobuf.Literal;
 import com.google.eclipse.protobuf.protobuf.Message;
 import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.eclipse.protobuf.protobuf.NativeOption;
+import com.google.eclipse.protobuf.protobuf.OneOf;
 import com.google.eclipse.protobuf.protobuf.NormalImport;
 import com.google.eclipse.protobuf.protobuf.Package;
 import com.google.eclipse.protobuf.protobuf.PublicImport;
@@ -50,6 +51,20 @@ public class Images_imageFor_Test {
   @Rule public XtextRule xtext = overrideRuntimeModuleWith(integrationTestModule());
 
   @Inject private Images images;
+
+  @Test public void should_show_existing_field_icons_for_implicit_maps_and_oneof_members() {
+    xtext.parseText("syntax = \"proto3\"; message Child {} message Parent { "
+        + "string text = 1; map<string, Child> children = 2; oneof choice { Child child = 3; } }");
+    for (MessageField field : xtext.findAll(MessageField.class)) {
+      if (field.eContainer() instanceof com.google.eclipse.protobuf.protobuf.MapType) continue;
+      String image = images.imageFor(field);
+      assertThat(image, equalTo("field.gif"));
+      assertThat(image, existsInProject());
+    }
+    String image = images.imageFor(xtext.findFirst(OneOf.class));
+    assertThat(image, equalTo("group.gif"));
+    assertThat(image, existsInProject());
+  }
 
   // syntax = "proto2";
   //

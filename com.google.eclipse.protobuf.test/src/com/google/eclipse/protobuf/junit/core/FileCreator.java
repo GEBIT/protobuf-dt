@@ -12,6 +12,7 @@ import static java.util.regex.Pattern.compile;
 
 import static com.google.eclipse.protobuf.junit.core.GeneratedProtoFiles.ensureParentDirectoryExists;
 import static com.google.eclipse.protobuf.junit.core.GeneratedProtoFiles.protoFile;
+import static com.google.eclipse.protobuf.util.SystemProperties.lineSeparator;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -23,25 +24,32 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
+ * Creates named fixture sources from single- or double-comment file directives, excluding the directive itself.
+ *
  * @author alruiz@google.com (Alex Ruiz)
  */
 class FileCreator {
-  private static final Pattern CREATE_FILE_PATTERN = compile("// Create file (.*)");
+  private static final Pattern CREATE_FILE_PATTERN = compile("(?://\\s*)?Create file (.+)");
+
+  static boolean isFileDirective(String line) {
+    return CREATE_FILE_PATTERN.matcher(line.trim()).matches();
+  }
 
   File createFileFrom(String comment) {
-    String fileName = null;
     try (Scanner scanner = new Scanner(comment)) {
-	    while (scanner.hasNextLine()) {
-	      String line = scanner.nextLine();
-	      Matcher matcher = CREATE_FILE_PATTERN.matcher(line);
-	      if (!matcher.matches()) {
-	        return null;
-	      }
-	      fileName = matcher.group(1);
-	      break;
-	    }
+      if (!scanner.hasNextLine()) {
+        return null;
+      }
+      Matcher matcher = CREATE_FILE_PATTERN.matcher(scanner.nextLine().trim());
+      if (!matcher.matches()) {
+        return null;
+      }
+      StringBuilder contents = new StringBuilder();
+      while (scanner.hasNextLine()) {
+        contents.append(scanner.nextLine()).append(lineSeparator());
+      }
+      return createFile(matcher.group(1).trim(), contents.toString());
     }
-    return createFile(fileName, comment);
   }
 
   private File createFile(String fileName, String contents) {

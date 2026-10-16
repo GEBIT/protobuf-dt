@@ -16,12 +16,13 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.eclipse.emf.ecore.EObject;
+import org.eclipse.emf.ecore.EReference;
 import org.eclipse.emf.ecore.EStructuralFeature;
-import org.eclipse.xtext.naming.QualifiedName;
 import org.eclipse.xtext.nodemodel.BidiTreeIterator;
 import org.eclipse.xtext.nodemodel.ILeafNode;
 import org.eclipse.xtext.nodemodel.INode;
 import org.eclipse.xtext.nodemodel.impl.AbstractNode;
+import org.eclipse.xtext.nodemodel.util.NodeModelUtils;
 
 import com.google.eclipse.protobuf.protobuf.DefaultValueFieldOption;
 import com.google.eclipse.protobuf.protobuf.Package;
@@ -30,9 +31,7 @@ import com.google.eclipse.protobuf.protobuf.Package;
  * @author alruiz@google.com (Alex Ruiz)
  */
 class Finder {
-  // TODO remove feature names that are not used or don't exist any more.
-  private static final String[] FEATURE_NAMES = { "extension", "target", "message", "name", "optionField", "property",
-      "source", "type", "value", "importedNamespace"};
+  private static final String[] FEATURE_NAMES = { "name", "source", "target", "type", "value", "importedNamespace" };
 
   private final String protoAsText;
   private final AbstractNode root;
@@ -78,17 +77,23 @@ class Finder {
   }
 
   private boolean areNamesEqual(String expected, Object e, List<SearchOption> options) {
-    String realExpected = expected;
-    if (realExpected.indexOf(".") != -1 && !(e instanceof Package)) {
-      String[] segments = expected.split("\\.");
-      QualifiedName qualifiedName = QualifiedName.create(segments);
-      realExpected = qualifiedName.getLastSegment();
-    }
     String actual = nameOf(e);
-    if (options.contains(IGNORE_CASE)) {
-      return realExpected.equalsIgnoreCase(actual);
+    if (!(e instanceof Package)) {
+      expected = simpleName(expected);
+      actual = simpleName(actual);
     }
-    return realExpected.equals(actual);
+    if (options.contains(IGNORE_CASE)) {
+      return expected.equalsIgnoreCase(actual);
+    }
+    return expected.equals(actual);
+  }
+
+  private String simpleName(String name) {
+    if (name == null) {
+      return null;
+    }
+    String result = name.substring(name.lastIndexOf('.') + 1);
+    return result.startsWith("^") ? result.substring(1) : result;
   }
 
   private String nameOf(Object o) {
@@ -97,20 +102,35 @@ class Finder {
     }
     EObject e = (EObject) o;
     for (String name : FEATURE_NAMES) {
-      Object value = feature(e, name);
+      EStructuralFeature feature = e.eClass().getEStructuralFeature(name);
+      if (feature == null || feature.isMany()) {
+        continue;
+      }
+      if (feature instanceof EReference && !((EReference) feature).isContainment()) {
+        // Locate the written reference, even when its declaration is intentionally unresolved.
+        List<INode> nodes = NodeModelUtils.findNodesForFeature(e, feature);
+        if (!nodes.isEmpty()) {
+          StringBuilder text = new StringBuilder();
+          for (ILeafNode leaf : nodes.get(0).getLeafNodes()) {
+            if (!leaf.isHidden()) {
+              text.append(leaf.getText());
+            }
+          }
+          if (text.length() != 0) {
+            return text.toString();
+          }
+        }
+      }
+      Object value = e.eGet(feature, false);
       if (value instanceof String) {
         return (String) value;
       }
-      if (value != null) {
-        return nameOf(value);
+      String nestedName = nameOf(value);
+      if (nestedName != null) {
+        return nestedName;
       }
     }
     return null;
-  }
-
-  private Object feature(EObject e, String featureName) {
-    EStructuralFeature f = e.eClass().getEStructuralFeature(featureName);
-    return (f != null) ? e.eGet(f) : null;
   }
 
   ILeafNode find(String text) {

@@ -8,9 +8,6 @@
  */
 package com.google.eclipse.protobuf.conversion;
 
-import static java.lang.Double.NEGATIVE_INFINITY;
-import static java.lang.Double.NaN;
-import static java.lang.Double.POSITIVE_INFINITY;
 import static java.util.Arrays.asList;
 
 import static org.hamcrest.core.IsEqual.equalTo;
@@ -53,9 +50,9 @@ public class DOUBLEValueConverter_toValue_Test {
       { "6.8", 6.8D },
       { "-3.1", -3.1D },
       { ".3", 0.3D },
-      { "nan", NaN },
-      { "inf", POSITIVE_INFINITY },
-      { "-inf", NEGATIVE_INFINITY }
+      { "1f", 1D },
+      { "2.5F", 2.5D },
+      { "1e400", Double.POSITIVE_INFINITY }
     });
   }
 
@@ -72,7 +69,7 @@ public class DOUBLEValueConverter_toValue_Test {
     converter = xtext.injector().getInstance(DOUBLEValueConverter.class);
   }
 
-  @Test public void should_parse_hexadecimal_number() {
+  @Test public void should_parse_numeric_floating_constant() {
     Double value = converter.toValue(input, node);
     assertThat(value, equalTo(expected));
   }

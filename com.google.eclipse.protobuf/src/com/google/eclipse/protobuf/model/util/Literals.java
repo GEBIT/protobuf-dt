@@ -8,12 +8,18 @@
  */
 package com.google.eclipse.protobuf.model.util;
 
-import static java.lang.Math.max;
-
-import static org.eclipse.xtext.EcoreUtil2.getAllContentsOfType;
 import static org.eclipse.xtext.util.SimpleAttributeResolver.newResolver;
 
-import java.util.List;
+import com.google.common.collect.BoundType;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeSet;
+import com.google.eclipse.protobuf.model.util.IndexRanges.BackwardsRangeException;
+import com.google.eclipse.protobuf.protobuf.EnumElement;
+import com.google.eclipse.protobuf.protobuf.IndexRange;
+import com.google.eclipse.protobuf.protobuf.ReservedEnum;
+import com.google.inject.Inject;
 
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.emf.ecore.EStructuralFeature;
@@ -29,33 +35,73 @@ import com.google.inject.Singleton;
  */
 @Singleton public class Literals {
 	private final static SimpleAttributeResolver<EObject, Long> INDEX_RESOLVER = newResolver(long.class, "index");
+  @Inject private IndexRanges indexRanges;
+  @Inject private Syntaxes syntaxes;
 	
-  /**
-   * Calculates the index value for the given literal. The calculated index value is the maximum of all the index values
-   * of the given literal's siblings, plus one. The minimum index value is zero.
-   * <p>
-   * For example, in the following message:
-   * <pre>
-   * enum PhoneType {
-   *   MOBILE = 0;
-   *   HOME = 1;
-   *   WORK =
-   * </pre>
-   * The calculated index value for the literal {@code WORK} will be 2.
-   * </p>
-   * @param literal the given literal.
-   * @return the calculated index value.
-   */
+  /** Returns a free int32 enum value, or Long.MIN_VALUE if none exists. */
   public long calculateNewIndexOf(Literal literal) {
-    long index = -1;
-    List<Literal> allLiterals = getAllContentsOfType(literal.eContainer(), Literal.class);
-    for (Literal c : allLiterals) {
-      if (c == literal) {
-        continue;
-      }
-      index = max(index, c.getIndex());
+    return calculateNewIndexAfter(literal, Long.MIN_VALUE);
+  }
+
+  /** Allocates after a pending document assignment without mutating the enum. */
+  public long calculateNewIndexAfter(Literal literal, long assignedIndex) {
+    if (literal == null || !(literal.eContainer() instanceof com.google.eclipse.protobuf.protobuf.Enum)) {
+      return Long.MIN_VALUE;
     }
-    return ++index;
+    com.google.eclipse.protobuf.protobuf.Enum enumeration =
+        (com.google.eclipse.protobuf.protobuf.Enum) literal.eContainer();
+    RangeSet<Long> available = TreeRangeSet.create();
+    available.add(Range.closed((long) Integer.MIN_VALUE, (long) Integer.MAX_VALUE));
+    long highest = -1L;
+    if (assignedIndex >= Integer.MIN_VALUE && assignedIndex <= Integer.MAX_VALUE) {
+      available.remove(Range.singleton(assignedIndex));
+      highest = Math.max(highest, assignedIndex);
+    }
+    boolean first = true;
+    for (EnumElement element : enumeration.getElements()) {
+      if (element instanceof Literal) {
+        first = element == literal;
+        break;
+      }
+    }
+    for (EnumElement element : enumeration.getElements()) {
+      if (element instanceof Literal && element != literal) {
+        Literal other = (Literal) element;
+        if (other.getIndex() >= Integer.MIN_VALUE && other.getIndex() <= Integer.MAX_VALUE) {
+          available.remove(Range.singleton(other.getIndex()));
+          highest = Math.max(highest, other.getIndex());
+        }
+      } else if (element instanceof ReservedEnum) {
+        for (IndexRange source : Iterables.filter(((ReservedEnum) element).getReservations(), IndexRange.class)) {
+          try {
+            available.remove(indexRanges.toLongRange(source));
+          } catch (BackwardsRangeException e) {
+            // Invalid reservations do not occupy a number.
+          }
+        }
+      }
+    }
+    if (first && assignedIndex == Long.MIN_VALUE && syntaxes.isProto3(literal)) {
+      return available.contains(0L) ? 0L : Long.MIN_VALUE;
+    }
+    long candidate = firstAtOrAfter(available, highest + 1L);
+    if (candidate != Long.MIN_VALUE) {
+      return candidate;
+    }
+    candidate = firstAtOrAfter(available, 0L);
+    return candidate != Long.MIN_VALUE ? candidate : firstAtOrAfter(available, Integer.MIN_VALUE);
+  }
+
+  private long firstAtOrAfter(RangeSet<Long> available, long start) {
+    for (Range<Long> range : available.asRanges()) {
+      long first = range.lowerEndpoint() + (range.lowerBoundType() == BoundType.OPEN ? 1L : 0L);
+      long last = range.upperEndpoint() - (range.upperBoundType() == BoundType.OPEN ? 1L : 0L);
+      long candidate = Math.max(first, start);
+      if (candidate <= last) {
+        return candidate;
+      }
+    }
+    return Long.MIN_VALUE;
   }
   
   /**

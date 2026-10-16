@@ -8,6 +8,8 @@
  */
 package com.google.eclipse.protobuf.conversion;
 
+import java.math.BigInteger;
+
 import com.google.inject.Inject;
 
 import org.eclipse.xtext.common.services.DefaultTerminalConverters;
@@ -21,19 +23,31 @@ public class ProtobufTerminalConverters extends DefaultTerminalConverters {
   @Inject private DOUBLEValueConverter doubleValueConverter;
   @Inject private HEXValueConverter hexValueConverter;
   @Inject private LONGValueConverter longValueConverter;
+  @Inject private IndexNumberValueConverter indexNumberValueConverter;
+  @Inject private IndexRangeMaxValueConverter indexRangeMaxValueConverter;
 
-  @ValueConverter(rule = "DOUBLE")
-  public IValueConverter<Double> DOUBLE() {
+  @ValueConverter(rule = "FloatingPointValue")
+  public IValueConverter<Double> FloatingPointValue() {
     return doubleValueConverter;
   }
 
-  @ValueConverter(rule = "HEX")
-  public IValueConverter<Long> HEX() {
+  @ValueConverter(rule = "SignedHex")
+  public IValueConverter<BigInteger> SignedHex() {
     return hexValueConverter;
   }
 
-  @ValueConverter(rule = "LONG")
-  public IValueConverter<Long> LONG() {
+  @ValueConverter(rule = "SignedLong")
+  public IValueConverter<BigInteger> SignedLong() {
     return longValueConverter;
+  }
+
+  @ValueConverter(rule = "IndexNumber")
+  public IValueConverter<Long> IndexNumber() {
+    return indexNumberValueConverter;
+  }
+
+  @ValueConverter(rule = "IndexRangeMax")
+  public IValueConverter<String> IndexRangeMax() {
+    return indexRangeMaxValueConverter;
   }
 }

@@ -31,7 +31,7 @@ public class PreferenceDrivenProtobufParser extends ProtobufParser {
       int initialLookAhead) {
     IParseResult result = super.doParse(ruleName, in, builder, initialLookAhead);
     MiscellaneousPreferences preferences = new MiscellaneousPreferences(storeAccess);
-    if (preferences.isGoogleInternal() && hasUnknownSyntax(result)) {
+    if (preferences.isGoogleInternal() && result.hasSyntaxErrors() && hasUnknownSyntax(result)) {
       return new ParseResult(new UnknownSyntaxProtobuf(), result.getRootNode(), false);
     }
     return result;

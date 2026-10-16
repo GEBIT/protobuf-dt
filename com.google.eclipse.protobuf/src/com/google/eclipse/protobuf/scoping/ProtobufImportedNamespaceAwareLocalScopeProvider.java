@@ -16,7 +16,6 @@ import org.eclipse.emf.common.util.EList;
 import org.eclipse.emf.ecore.EClass;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.emf.ecore.EReference;
-import org.eclipse.emf.ecore.resource.Resource;
 import org.eclipse.xtext.naming.QualifiedName;
 import org.eclipse.xtext.resource.ISelectable;
 import org.eclipse.xtext.scoping.IGlobalScopeProvider;
@@ -110,19 +109,6 @@ public class ProtobufImportedNamespaceAwareLocalScopeProvider
       return null;
     }
     return doCreateImportNormalizer(importedNamespace, WILDCARD, ignoreCase);
-  }
-
-  /** Makes {@code getLocalElementsScope()} visible to {@link ProtobufScopeProvider} */
-  @Override
-  protected IScope getLocalElementsScope(
-      IScope parent, EObject context, EReference reference) {
-    return super.getLocalElementsScope(parent, context, reference);
-  }
-
-  /** Makes {@code getResourceScope()} visible to {@link ProtobufScopeProvider} */
-  @Override
-  protected IScope getResourceScope(Resource res, EReference reference) {
-    return super.getResourceScope(res, reference);
   }
 
   /** Returns a {@link ProtobufSelectableBasedScope} instead of {@link SelectableBasedScope} */

@@ -11,6 +11,8 @@ package com.google.eclipse.protobuf.scoping;
 import static com.google.common.collect.Maps.newHashMap;
 
 import com.google.eclipse.protobuf.protobuf.Enum;
+import com.google.eclipse.protobuf.protobuf.Group;
+import com.google.eclipse.protobuf.protobuf.Option;
 import com.google.eclipse.protobuf.protobuf.IndexedElement;
 import com.google.eclipse.protobuf.protobuf.Literal;
 import com.google.eclipse.protobuf.protobuf.Message;
@@ -18,6 +20,8 @@ import com.google.eclipse.protobuf.protobuf.Protobuf;
 import com.google.eclipse.protobuf.protobuf.Rpc;
 import com.google.eclipse.protobuf.protobuf.Service;
 import com.google.eclipse.protobuf.protobuf.Stream;
+import com.google.eclipse.protobuf.protobuf.OneOf;
+import com.google.eclipse.protobuf.protobuf.Extensions;
 
 import java.util.Map;
 import java.util.Map.Entry;
@@ -37,7 +41,9 @@ enum OptionType {
   LITERAL("EnumValueOptions"),
   SERVICE("ServiceOptions"),
   RPC("MethodOptions"),
-  STREAM("StreamOptions");
+  STREAM("StreamOptions"),
+  ONEOF("OneofOptions"),
+  EXTENSION_RANGE("ExtensionRangeOptions");
 
   private static final Map<Class<?>, OptionType> OPTION_TYPES_BY_CONTAINER = newHashMap();
 
@@ -50,6 +56,8 @@ enum OptionType {
     OPTION_TYPES_BY_CONTAINER.put(Service.class, SERVICE);
     OPTION_TYPES_BY_CONTAINER.put(Rpc.class, RPC);
     OPTION_TYPES_BY_CONTAINER.put(Stream.class, STREAM);
+    OPTION_TYPES_BY_CONTAINER.put(OneOf.class, ONEOF);
+    OPTION_TYPES_BY_CONTAINER.put(Extensions.class, EXTENSION_RANGE);
   }
 
   // The name of the message in descriptor.proto that specifies the type of an option.
@@ -76,6 +84,9 @@ enum OptionType {
    */
   static OptionType typeOf(EObject container) {
     if (container != null) {
+      if (container instanceof Option && container.eContainer() instanceof Group) {
+        return MESSAGE;
+      }
       for (Entry<Class<?>, OptionType> optionTypeByContainer :
           OPTION_TYPES_BY_CONTAINER.entrySet()) {
         if (optionTypeByContainer.getKey().isInstance(container)) {

@@ -8,19 +8,26 @@
  */
 package com.google.eclipse.protobuf.model.util;
 
-import static java.lang.Math.max;
 import static java.util.Collections.emptyList;
 import static org.eclipse.xtext.util.SimpleAttributeResolver.newResolver;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
 
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.emf.ecore.EStructuralFeature;
 import org.eclipse.xtext.EcoreUtil2;
 import org.eclipse.xtext.util.SimpleAttributeResolver;
+import org.eclipse.xtext.util.IResourceScopeCache;
+import org.eclipse.xtext.util.Tuples;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
+import com.google.common.collect.TreeRangeSet;
+import com.google.eclipse.protobuf.protobuf.Extensions;
+import com.google.eclipse.protobuf.protobuf.TypeExtension;
 import com.google.eclipse.protobuf.model.util.IndexRanges.BackwardsRangeException;
 import com.google.eclipse.protobuf.protobuf.FieldOption;
 import com.google.eclipse.protobuf.protobuf.Group;
@@ -29,8 +36,12 @@ import com.google.eclipse.protobuf.protobuf.IndexedElement;
 import com.google.eclipse.protobuf.protobuf.Message;
 import com.google.eclipse.protobuf.protobuf.OneOf;
 import com.google.eclipse.protobuf.protobuf.Reserved;
+import com.google.eclipse.protobuf.protobuf.BuiltinLiteral;
+import com.google.eclipse.protobuf.protobuf.MapType;
+import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.google.inject.Provider;
 
 /**
  * Utility methods related to <code>{@link IndexedElement}</code>s.
@@ -42,56 +53,149 @@ import com.google.inject.Singleton;
 
   @Inject private IndexRanges indexRanges;
   @Inject private ModelObjects modelObjects;
+  @Inject private final IResourceScopeCache cache = IResourceScopeCache.NullImpl.INSTANCE;
 
   /**
-   * Calculates the index value for the given element. The calculated index value is the maximum of all the index values
-   * of the given element's siblings, plus one. The minimum index value is 1.
-   * <p>
-   * For example, in the following message:
-   * <pre>
-   * message Person {
-   *   required string name = 1;
-   *   optional string email = 2;
-   *   optional PhoneNumber phone =
-   * </pre>
-   * The calculated index value for the element {@code PhoneNumber} will be 3.
-   * </p>
-   * @param e the given element.
-   * @return the calculated value for the index of the given element.
+   * Prefers a number above all occupied ranges, then searches legal gaps from one.
+   * Returns -1 when no number is available or the declaration has no field scope.
    */
   public long calculateNewIndexFor(IndexedElement e) {
-    EObject containingMessage = EcoreUtil2.getContainerOfType(e, Message.class);
-    long index = findMaxIndex(containingMessage.eContents());
-    return index + 1;
+    return calculateNewIndexAfter(e, -1L);
   }
 
-  private long findMaxIndex(Iterable<? extends EObject> elements) {
-    long maxIndex = 0;
-
-    for (EObject element : elements) {
-      if (element instanceof OneOf) {
-        maxIndex = max(maxIndex, findMaxIndex(((OneOf) element).getElements()));
-      } else if (element instanceof IndexedElement) {
-        maxIndex  = max(maxIndex, indexOf((IndexedElement) element));
-        if (element instanceof Group) {
-          maxIndex = max(maxIndex, findMaxIndex(((Group) element).getElements()));
+  /** Allocates with a pending document edit's tag occupied, without mutating the model. */
+  public long calculateNewIndexAfter(IndexedElement e, long assignedIndex) {
+    EObject owner = e == null ? null : e.eContainer();
+    if (owner instanceof OneOf) {
+      owner = owner.eContainer();
+    }
+    if (!(owner instanceof Message || owner instanceof Group || owner instanceof TypeExtension)) {
+      return -1L;
+    }
+    RangeSet<Long> occupied = TreeRangeSet.create();
+    RangeSet<Long> allowed = TreeRangeSet.create();
+    long maximum = IndexRanges.MAX_FIELD_NUMBER;
+    if (owner instanceof TypeExtension) {
+      TypeExtension extension = (TypeExtension) owner;
+      EObject target = extension.getType() == null ? null : extension.getType().getTarget();
+      if (target == null || target.eIsProxy()) {
+        return -1L;
+      }
+      if (indexRanges.isMessageSet(target)) {
+        maximum = IndexRanges.MAX_MESSAGE_SET_EXTENSION_NUMBER;
+      }
+      for (EObject element : ownedElements(target)) {
+        if (element instanceof Extensions) {
+          for (IndexRange range : ((Extensions) element).getRanges()) {
+            addRange(allowed, range, maximum);
+          }
         }
-      } else if (element instanceof Reserved) {
-        for (IndexRange indexRange :
-            Iterables.filter(((Reserved) element).getReservations(), IndexRange.class)) {
-          try {
-            Range<Long> range = indexRanges.toLongRange(indexRange);
-            if (range.hasUpperBound()) {
-              maxIndex = max(maxIndex, range.upperEndpoint());
+      }
+    } else {
+      allowed.add(Range.closed(1L, maximum));
+    }
+    long highest = 0L;
+    if (assignedIndex >= 1L && assignedIndex <= maximum) {
+      occupied.add(Range.singleton(assignedIndex));
+      highest = assignedIndex;
+    }
+    for (EObject element : ownedElements(owner)) {
+      if (element instanceof IndexedElement) {
+        long number = indexOf((IndexedElement) element);
+        if (number >= 1 && number <= maximum) {
+          occupied.add(Range.singleton(number));
+          highest = Math.max(highest, number);
+        }
+      } else if (element instanceof Reserved || element instanceof Extensions) {
+        Iterable<IndexRange> ranges = element instanceof Reserved
+            ? Iterables.filter(((Reserved) element).getReservations(), IndexRange.class)
+            : ((Extensions) element).getRanges();
+        for (IndexRange range : ranges) {
+          addRange(occupied, range, maximum);
+        }
+      }
+    }
+    if (owner instanceof TypeExtension && owner.eResource() != null
+        && owner.eResource().getResourceSet() != null) {
+      EObject target = ((TypeExtension) owner).getType().getTarget();
+      List<org.eclipse.emf.ecore.resource.Resource> resources = owner.eResource().getResourceSet().getResources();
+      for (int i = 0, size = resources.size(); i < size; i++) {
+        org.eclipse.emf.ecore.resource.Resource resource = resources.get(i);
+        for (EObject root : resource.getContents()) {
+          for (TypeExtension extension : EcoreUtil2.getAllContentsOfType(root, TypeExtension.class)) {
+            if (extension.getType() != null && extension.getType().getTarget() == target) {
+              for (IndexedElement field : extension.getElements()) {
+                long number = indexOf(field);
+                if (number >= 1 && number <= maximum) {
+                  occupied.add(Range.singleton(number));
+                  highest = Math.max(highest, number);
+                }
+              }
             }
-          } catch (BackwardsRangeException e) {
-            // Do not consider reserved ranges that are invalid.
           }
         }
       }
     }
+    for (Range<Long> range : occupied.asRanges()) {
+      highest = Math.max(highest, range.upperEndpoint());
+    }
+    occupied.add(Range.closed(IndexRanges.FIRST_RESERVED_NUMBER, IndexRanges.LAST_RESERVED_NUMBER));
+    allowed.removeAll(occupied);
+    long preferred = firstAvailableAtOrAfter(allowed, highest + 1L);
+    return preferred >= 1 ? preferred : firstAvailableAtOrAfter(allowed, 1L);
+  }
 
-    return maxIndex;
+  private long firstAvailableAtOrAfter(RangeSet<Long> available, long start) {
+    for (Range<Long> range : available.asRanges()) {
+      long first = range.lowerEndpoint()
+          + (range.lowerBoundType() == com.google.common.collect.BoundType.OPEN ? 1L : 0L);
+      long last = range.upperEndpoint()
+          - (range.upperBoundType() == com.google.common.collect.BoundType.OPEN ? 1L : 0L);
+      long candidate = Math.max(first, start);
+      if (candidate <= last) {
+        return candidate;
+      }
+    }
+    return -1L;
+  }
+
+  private void addRange(RangeSet<Long> ranges, IndexRange source, long maximum) {
+    try {
+      Range<Long> range = indexRanges.toLongRange(source);
+      long first = Math.max(1L, range.lowerEndpoint());
+      long last = Math.min(maximum, range.upperEndpoint());
+      if (first <= last) {
+        ranges.add(Range.closed(first, last));
+      }
+    } catch (BackwardsRangeException e) {
+      // An invalid range does not occupy any legal numbers.
+    }
+  }
+
+  /** Direct declarations and real oneof members, never nested scope or derived metadata contents. */
+  public List<EObject> ownedElements(final EObject owner) {
+    if (owner == null) {
+      return Collections.emptyList();
+    }
+    Provider<List<EObject>> declarations = () -> {
+      List<EObject> elements = new ArrayList<>();
+      collectOwnedElements(owner, elements);
+      return Collections.unmodifiableList(elements);
+    };
+    return owner.eResource() == null ? declarations.get()
+        : cache.get(Tuples.pair(owner, "semanticOwnedElements"), owner.eResource(), declarations);
+  }
+
+  private void collectOwnedElements(EObject owner, List<EObject> elements) {
+    for (EObject element : owner.eContents()) {
+      if (element instanceof BuiltinLiteral || element instanceof MessageField && owner instanceof MapType) {
+        continue;
+      }
+      elements.add(element);
+      if (element instanceof OneOf) {
+        collectOwnedElements(element, elements);
+      }
+    }
   }
 
   /**

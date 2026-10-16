@@ -37,6 +37,7 @@ import com.google.eclipse.protobuf.protobuf.Import;
 import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.eclipse.protobuf.protobuf.ModifierEnum;
 import com.google.eclipse.protobuf.protobuf.Option;
+import com.google.eclipse.protobuf.protobuf.OneOf;
 import com.google.inject.Singleton;
 
 /**
@@ -53,7 +54,7 @@ import com.google.inject.Singleton;
     addImages(OPTIONAL, REPEATED, REQUIRED);
     addImages(ENUM, TYPE_EXTENSION, EXTENSIONS, GROUP, IMPORT, LITERAL, MESSAGE, OPTION, PACKAGE, RPC, SERVICE, STREAM,
         SYNTAX);
-    addImages("imports", "options");
+    addImages("imports", "options", "field");
   }
 
   private static void addImages(ModifierEnum...modifiers) {
@@ -91,11 +92,13 @@ import com.google.inject.Singleton;
     } else if (o instanceof MessageField) {
       MessageField field = (MessageField) o;
       ModifierEnum modifier = field.getModifier();
-      imageName = imageNameFrom(modifier);
+      imageName = modifier == ModifierEnum.UNSPECIFIED ? "field" : imageNameFrom(modifier);
     } else if (o instanceof Option) {
       imageName = imageNameFrom(OPTION);
     } else if (o instanceof Import) {
       imageName = imageNameFrom(IMPORT);
+    } else if (o instanceof OneOf) {
+      imageName = imageNameFrom(GROUP);
     } else if (o instanceof EClass) {
       EClass eClass = (EClass) o;
       imageName = imageNameFrom(eClass);

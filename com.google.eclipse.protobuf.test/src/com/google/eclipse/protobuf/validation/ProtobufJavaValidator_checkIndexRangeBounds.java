@@ -8,71 +8,78 @@
  */
 package com.google.eclipse.protobuf.validation;
 
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
+import static com.google.eclipse.protobuf.junit.core.IntegrationTestModule.integrationTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.util.List;
 
-import org.eclipse.emf.ecore.EObject;
-import org.eclipse.emf.ecore.EStructuralFeature;
-import org.eclipse.xtext.validation.ValidationMessageAcceptor;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 
 import com.google.eclipse.protobuf.junit.core.XtextRule;
 import com.google.eclipse.protobuf.protobuf.IndexRange;
-import com.google.eclipse.protobuf.protobuf.ProtobufPackage;
 import com.google.inject.Inject;
 
 public class ProtobufJavaValidator_checkIndexRangeBounds {
-  @Rule public XtextRule xtext = overrideRuntimeModuleWith(unitTestModule());
+  @Rule public XtextRule xtext = overrideRuntimeModuleWith(integrationTestModule());
 
-  @Inject private ProtobufJavaValidator validator;
-  private ValidationMessageAcceptor messageAcceptor;
+  @Inject private org.eclipse.xtext.validation.IResourceValidator resourceValidator;
+  @Inject private com.google.eclipse.protobuf.model.util.IndexRanges ranges;
 
-  @Before public void setUp() {
-    messageAcceptor = mock(ValidationMessageAcceptor.class);
-    validator.setMessageAcceptor(messageAcceptor);
+  @Test public void should_reject_nonpositive_message_ranges() {
+    assertSemanticError("syntax = 'proto2'; message NegativeRange { reserved -2 to 2; }");
+    assertSemanticError("syntax = 'proto2'; message ZeroRange { reserved 0; }");
+    assertSemanticError("syntax = 'proto2'; message ZeroExtension { extensions 0 to 2; }");
+  }
+
+  @Test public void should_reject_backward_but_accept_single_number_ranges() {
+    assertSemanticError("syntax = 'proto2'; message Backward { reserved 3 to 1; }");
+    xtext.parseText("syntax = 'proto2'; message Singleton { reserved 4 to 4; }");
+    List<org.eclipse.xtext.validation.Issue> issues = resourceValidator.validate(
+        xtext.resource(), org.eclipse.xtext.validation.CheckMode.ALL, null);
+    assertTrue(xtext.resource().getErrors().toString(), xtext.resource().getErrors().isEmpty());
+    assertTrue(issues.toString(), issues.isEmpty());
+  }
+
+  // syntax = "proto3";
+  // message MessageReservations { reserved 7 to max; int32 value = 1; }
+  // enum EnumReservations { ZERO = 0; NEGATIVE = -1; reserved -2147483648 to -2, 7 to max; }
+  @Test public void should_accept_owner_specific_max_and_negative_enum_reservations() throws Exception {
+    assertTrue(resourceValidator.validate(xtext.resource(), org.eclipse.xtext.validation.CheckMode.ALL, null).isEmpty());
+    assertTrue(xtext.resource().getErrors().isEmpty());
+    List<IndexRange> parsed = xtext.findAll(IndexRange.class);
+    assertEquals(Long.valueOf(536870911L), ranges.toLongRange(parsed.get(0)).upperEndpoint());
+    assertEquals(Long.valueOf(Integer.MAX_VALUE), ranges.toLongRange(parsed.get(2)).upperEndpoint());
   }
 
   // syntax = "proto2";
-  //
-  // message Person {
-  //   reserved -2 to 2;
-  // }
-  @Test public void should_error_on_negative_bounds() {
-    List<IndexRange> indexRanges = xtext.findAll(IndexRange.class);
-    validator.checkIndexRangeBounds(indexRanges.get(0));
-    verifyError(
-        "Extensions and reserved numbers must be positive.",
-        indexRanges.get(0),
-        ProtobufPackage.Literals.INDEX_RANGE__FROM);
-    verifyNoMoreInteractions(messageAcceptor);
+  // message NumericReservations { reserved 010 to 0x0f; optional int32 value = 1; }
+  @Test public void should_decode_octal_and_hex_range_endpoints() throws Exception {
+    assertTrue(resourceValidator.validate(xtext.resource(), org.eclipse.xtext.validation.CheckMode.ALL, null).isEmpty());
+    assertEquals(com.google.common.collect.Range.closed(8L, 15L), ranges.toLongRange(xtext.findFirst(IndexRange.class)));
   }
 
-  // syntax = "proto2";
-  //
-  // message Person {
-  //   reserved 3 to 1;
-  //   reserved 4 to 4;
-  // }
-  @Test public void should_error_on_end_less_than_start() {
-    List<IndexRange> indexRanges = xtext.findAll(IndexRange.class);
-    validator.checkIndexRangeBounds(indexRanges.get(0));
-    validator.checkIndexRangeBounds(indexRanges.get(1));
-    verifyError("End number must be greater than or equal to start number.", indexRanges.get(0));
-    verifyNoMoreInteractions(messageAcceptor);
+  @Test public void should_reject_range_overflow_and_backward_enum_ranges() {
+    assertSemanticError("syntax = 'proto2'; message R { reserved 1 to 536870912; }");
+    assertSemanticError("syntax = 'proto2'; enum E { ZERO = 0; reserved -2147483649; }");
+    assertSemanticError("syntax = 'proto2'; enum E { ZERO = 0; reserved 1 to 2147483648; }");
+    assertSemanticError("syntax = 'proto2'; enum E { ZERO = 0; reserved -1 to -2; }");
   }
 
-  private void verifyError(String message, EObject errorSource) {
-    verifyError(message, errorSource, null);
+  @Test public void should_reject_mixed_enum_reservations_and_overlapping_negative_ranges() {
+    assertSemanticError("syntax = 'proto2'; enum E { ZERO = 0; reserved -2, 'REMOVED'; }");
+    assertSemanticError("syntax = 'proto2'; enum E { ZERO = 0; reserved -5 to -2; reserved -3 to -1; }");
+    assertSemanticError("syntax = 'proto2'; enum E { ZERO = 0; reserved 'REMOVED'; reserved 'REMOVED'; }");
   }
 
-  private void verifyError(String message, EObject errorSource, EStructuralFeature errorFeature) {
-    verify(messageAcceptor).acceptError(message, errorSource, errorFeature, -1, null);
+  private void assertSemanticError(String source) {
+    xtext.parseText(source);
+    List<org.eclipse.xtext.validation.Issue> issues = resourceValidator.validate(
+        xtext.resource(), org.eclipse.xtext.validation.CheckMode.ALL, null);
+    assertTrue(xtext.resource().getErrors().toString(), xtext.resource().getErrors().isEmpty());
+    assertTrue(issues.toString(), issues.stream().anyMatch(
+        issue -> issue.getSeverity() == org.eclipse.xtext.diagnostics.Severity.ERROR));
   }
 }

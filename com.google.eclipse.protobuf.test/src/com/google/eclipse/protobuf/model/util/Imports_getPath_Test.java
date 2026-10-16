@@ -42,6 +42,12 @@ public class Imports_getPath_Test {
     assertThat(imports.getPath(anImport), equalTo("types.proto"));
   }
 
+  // syntax = "proto2";
+  // import "ty\x70" 'es\056proto';
+  @Test public void should_decode_concatenated_protobuf_import_chunks() {
+    assertThat(imports.getPath(firstImportOf(xtext.root())), equalTo("types.proto"));
+  }
+
   private Import firstImportOf(Protobuf root) {
     List<Import> allImports = getAllContentsOfType(root, Import.class);
     return allImports.get(0);

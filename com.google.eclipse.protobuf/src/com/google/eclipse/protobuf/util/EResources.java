@@ -12,6 +12,8 @@ import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.emf.ecore.resource.Resource;
+import org.eclipse.xtext.ui.workspace.EclipseProjectConfig;
+import org.eclipse.xtext.workspace.ProjectConfigAdapter;
 
 /**
  * Utility methods for dealing with eResources.
@@ -23,11 +25,23 @@ public final class EResources {
    * Returns the containing project of the given resource, or {@code null} if none can be found.
    */
   public static IProject getProjectOf(Resource resource) {
-    String resourceUri = resource.getURI().toPlatformString(true);
-    if (resourceUri == null) {
+    if (resource == null) {
       return null;
     }
-    IFile file = Workspaces.workspaceRoot().getFile(Path.fromOSString(resourceUri));
-    return file == null ? null : file.getProject();
+    if (resource.getResourceSet() != null) {
+      ProjectConfigAdapter adapter = ProjectConfigAdapter.findInEmfObject(resource.getResourceSet());
+      if (adapter != null && adapter.getProjectConfig() instanceof EclipseProjectConfig) {
+        return ((EclipseProjectConfig) adapter.getProjectConfig()).getProject();
+      }
+    }
+    if (resource.getURI() == null || !resource.getURI().isPlatformResource()) {
+      return null;
+    }
+    String resourceUri = resource.getURI().toPlatformString(true);
+    if (resourceUri == null || Path.fromPortableString(resourceUri).segmentCount() < 2) {
+      return null;
+    }
+    IFile file = Workspaces.workspaceRoot().getFile(Path.fromPortableString(resourceUri));
+    return file.getProject();
   }
 }

@@ -25,7 +25,13 @@ import com.google.eclipse.protobuf.model.util.ModelObjects;
 import com.google.eclipse.protobuf.model.util.Packages;
 import com.google.eclipse.protobuf.model.util.QualifiedNames;
 import com.google.eclipse.protobuf.protobuf.AbstractOption;
-import com.google.eclipse.protobuf.protobuf.BooleanLink;
+import com.google.eclipse.protobuf.protobuf.BuiltinLiteral;
+import com.google.eclipse.protobuf.protobuf.MapType;
+import com.google.eclipse.protobuf.protobuf.MessageField;
+import com.google.eclipse.protobuf.protobuf.Enum;
+import com.google.eclipse.protobuf.protobuf.Literal;
+import com.google.eclipse.protobuf.protobuf.IndexedElement;
+import com.google.eclipse.protobuf.protobuf.OneOf;
 import com.google.eclipse.protobuf.protobuf.ComplexValue;
 import com.google.eclipse.protobuf.protobuf.FieldName;
 import com.google.eclipse.protobuf.protobuf.Import;
@@ -49,7 +55,7 @@ public class ProtobufQualifiedNameProvider extends IQualifiedNameProvider.Abstra
   private static final Pair<NameType, QualifiedName> EMPTY_NAME = pair(NORMAL, null);
 
   private static final Class<?>[] IGNORED_TYPES = { Protobuf.class, Import.class, AbstractOption.class,
-    OptionSource.class, ScalarTypeLink.class, NumberLink.class, BooleanLink.class, StringLink.class, ComplexValue.class,
+    OptionSource.class, ScalarTypeLink.class, NumberLink.class, BuiltinLiteral.class, StringLink.class, ComplexValue.class,
     ValueField.class, FieldName.class };
 
   @Inject private final IQualifiedNameConverter converter = new IQualifiedNameConverter.DefaultImpl();
@@ -79,6 +85,10 @@ public class ProtobufQualifiedNameProvider extends IQualifiedNameProvider.Abstra
         QualifiedName qualifiedName = converter.toQualifiedName(name.getSecond());
         while (current.eContainer() != null) {
           current = current.eContainer();
+          if (e instanceof Literal && current instanceof Enum
+              || e instanceof IndexedElement && current instanceof OneOf) {
+            continue;
+          }
           QualifiedName parentsQualifiedName = getFullyQualifiedName(current, namingStrategy);
           if (parentsQualifiedName != null) {
             return pair(name.getFirst(), parentsQualifiedName.append(qualifiedName));
@@ -91,6 +101,9 @@ public class ProtobufQualifiedNameProvider extends IQualifiedNameProvider.Abstra
   }
 
   private boolean shouldIgnore(EObject e) {
+    if (e == null || e instanceof MessageField && e.eContainer() instanceof MapType) {
+      return true;
+    }
     for (Class<?> ignoredType : IGNORED_TYPES) {
       if (ignoredType.isInstance(e)) {
         return true;
@@ -111,10 +124,8 @@ public class ProtobufQualifiedNameProvider extends IQualifiedNameProvider.Abstra
     if (segments.isEmpty()) {
       return qualifiedName;
     }
+    // Source declaration names are relative, even when they repeat the package's first segment.
     QualifiedName packageQualifiedName = qualifiedNames.createQualifiedName(segments);
-    if (qualifiedName.startsWith(packageQualifiedName)) {
-      return qualifiedName;
-    }
     return packageQualifiedName.append(qualifiedName);
   }
 }

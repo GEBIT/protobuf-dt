@@ -16,7 +16,9 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
+import org.eclipse.core.resources.IProject;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.emf.common.util.URI;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.ide.FileStoreEditorInput;
 import org.eclipse.xtext.resource.XtextResource;
@@ -38,7 +40,9 @@ class FileStoreDocumentContentsFactory implements DocumentContentsFactory {
     try {
       String contents = contentsOf(file);
       document.set(contents);
-      XtextResource resource = resourceFactory.createResource(file.toURI().toString(), contents);
+      XtextResource resource = resourceFactory.createResource(URI.createURI(input.getURI().toString()),
+          input.getAdapter(IProject.class));
+      resourceFactory.loadResource(resource, contents);
       document.setInput(resource);
     } catch (Throwable t) {
       throw new CoreException(error(t));

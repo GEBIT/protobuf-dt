@@ -90,10 +90,9 @@ public class Labels {
     IndexedElement e = options.rootSourceOf(option);
     String name = options.nameForOption(e);
     if (option instanceof AbstractCustomOption) {
-      AbstractCustomOption customOption = (AbstractCustomOption) option;
       StringBuilder b = new StringBuilder();
       b.append(formatCustomOptionElement(name));
-      for (OptionField field : options.fieldsOf(customOption)) {
+      for (OptionField field : options.fieldsOf(option)) {
         IndexedElement source = field.getTarget();
         String sourceName = options.nameForOption(source);
         b.append(".")
@@ -151,7 +150,8 @@ public class Labels {
 
   private Object labelFor(Rpc rpc) {
     StyledString text = new StyledString(nameResolver.nameOf(rpc));
-    String types = String.format(" : %s > %s", nameOf(rpc.getArgType()), nameOf(rpc.getReturnType()));
+    String types = String.format(" : %s%s > %s%s", rpc.isIsArgStreaming() ? "stream " : "",
+        nameOf(rpc.getArgType()), rpc.isIsReturnStreaming() ? "stream " : "", nameOf(rpc.getReturnType()));
     text.append(types, DECORATIONS_STYLER);
     return text;
   }

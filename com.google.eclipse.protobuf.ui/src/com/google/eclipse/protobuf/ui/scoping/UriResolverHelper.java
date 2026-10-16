@@ -11,6 +11,9 @@ package com.google.eclipse.protobuf.ui.scoping;
 import static org.eclipse.core.runtime.IPath.SEPARATOR;
 import static org.eclipse.xtext.util.Strings.isEmpty;
 
+import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.Path;
 import org.eclipse.emf.common.util.URI;
 
 import com.google.eclipse.protobuf.ui.preferences.paths.DirectoryPath;
@@ -41,7 +44,8 @@ import com.google.inject.Singleton;
     if (isWorkspacePath) {
       if (importRootPath.endsWith(".jar")) {
     	// Special case of a file URI from within a jar in the workspace
-  		return URI.createURI("archive:platform:/resource" + importRootPath + "!/" + importUri);
+        return URI.createURI("archive:" + URI.createPlatformResourceURI(importRootPath, true)
+            + "!/").appendSegments(importUri.split("/"));
       }
       return resolvePlatformResourceUri(importUri, importRootPath);
     }
@@ -56,10 +60,8 @@ import com.google.inject.Singleton;
   private URI resolveFileUri(String importUri, String importRootPath) {
 	if (importRootPath.endsWith(".jar")) {
 	    // Special case of a file URI from within a jar outside of the workspace
-		return URI.createURI("archive:file:" 
-				+ (importRootPath.startsWith("/") ? "" : "///") // Windows paths need /// in the beginning
-				+ importRootPath.replaceAll("\\\\", "/") // Convert Windows dividers to the real ones
-				+ "!/" + importUri);
+        return URI.createURI("archive:" + URI.createFileURI(importRootPath.replace('\\', '/'))
+            + "!/").appendSegments(importUri.split("/"));
 	}
 	
 	String resolvedImportRootPath = pathResolver.resolvePath(importRootPath);
@@ -67,6 +69,10 @@ import com.google.inject.Singleton;
       return null;
     }
     String path = buildUriPath(importUri, resolvedImportRootPath);
+    IFile workspaceFile = ResourcesPlugin.getWorkspace().getRoot().getFileForLocation(Path.fromOSString(path));
+    if (workspaceFile != null && workspaceFile.exists()) {
+      return URI.createPlatformResourceURI(workspaceFile.getFullPath().toString(), true);
+    }
     return URI.createFileURI(path);
   }
 

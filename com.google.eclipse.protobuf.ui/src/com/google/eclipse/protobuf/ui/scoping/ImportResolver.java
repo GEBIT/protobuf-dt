@@ -8,9 +8,6 @@
  */
 package com.google.eclipse.protobuf.ui.scoping;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.eclipse.protobuf.model.util.Imports;
 import com.google.eclipse.protobuf.protobuf.Import;
 import com.google.eclipse.protobuf.scoping.IImportResolver;
@@ -23,8 +20,9 @@ import com.google.inject.Inject;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.resource.Resource;
+import org.eclipse.xtext.util.IResourceScopeCache;
+import org.eclipse.xtext.util.Tuples;
 
-import java.util.concurrent.ExecutionException;
 
 /**
  * Resolves "import" URIs.
@@ -37,17 +35,7 @@ public class ImportResolver implements IImportResolver {
   @Inject private IUriResolver resolver;
   @Inject private Uris uris;
 
-  private LoadingCache<Import, String> cache =
-      CacheBuilder.newBuilder().build(new CacheLoader<Import, String>() {
-        @Override
-        public String load(Import key) throws Exception {
-          String result = internalResolveUri(key);
-          if (result == null) {
-            throw new Exception("Unable to resolve import: " + imports.getPath(key));
-          }
-          return result;
-        }
-      });
+  @Inject private IResourceScopeCache cache;
 
   /*
    * The import URI is relative to the file where the import is. Protoc works fine, but the editor doesn't.
@@ -64,12 +52,12 @@ public class ImportResolver implements IImportResolver {
    * If we import "folder/proto2.proto" into proto1.proto, proto1.proto will compile fine, but the editor will complain.
    * We need to have the import URI as "platform:/resource/protobuf-test/folder/proto2.proto" for the editor to see it.
    */
-  @Override public String resolve(Import anImport) {
-    try {
-      return cache.get(anImport);
-    } catch (ExecutionException e) {
+  @Override public String resolve(final Import anImport) {
+    if (anImport == null || anImport.eResource() == null || imports.getPath(anImport) == null) {
       return null;
     }
+    return cache.get(Tuples.create(ImportResolver.class, anImport), anImport.eResource(),
+        () -> internalResolveUri(anImport));
   }
 
   private String internalResolveUri(Import anImport) {
@@ -80,25 +68,28 @@ public class ImportResolver implements IImportResolver {
 	      URI.createURI("platform:/plugin/de.gebit.eclipse.protobuf/");
 
   private String resolveUri(String importUri, Resource resource) {
-	// load the well-known types from the editor bundle instead of expecting them in the project
-    if(importUri.startsWith("google/protobuf/")) {
-    	return WELL_KNOWN_TYPES_LOCATION.toString() + importUri;
-    }
-	  
-	URI location =
-        descriptorProvider.descriptorLocation(EResources.getProjectOf(resource), importUri);
+    URI location = descriptorProvider.descriptorLocation(resource, importUri);
     if (location != null) {
-      return location.toString();
+      // Explicit descriptor selection is authoritative, including an unreadable selection.
+      return uris.referredResourceExists(location) ? location.toString() : null;
     }
-
-    URI resourceUri = resource.getURI();
-    IProject project = uris.projectOfReferredFile(resourceUri);
-    return resolver.resolveUri(importUri, resourceUri, project);
+    IProject project = EResources.getProjectOf(resource);
+    String resolved = resolver.resolveUri(importUri, resource.getURI(), project);
+    if (resolved != null) {
+      return resolved;
+    }
+    if (importUri.startsWith("google/protobuf/")) {
+      URI bundled = URI.createURI(importUri).resolve(WELL_KNOWN_TYPES_LOCATION);
+      return uris.referredResourceExists(bundled) ? bundled.toString() : null;
+    }
+    return null;
   }
 
   @Override
   public void invalidateCacheFor(Import anImport) {
-    cache.invalidate(anImport);
+    if (anImport != null && anImport.eResource() != null) {
+      cache.clear(anImport.eResource());
+    }
   }
   
   

@@ -18,6 +18,8 @@ import static org.mockito.Mockito.mock;
 import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
 
+import java.math.BigInteger;
+
 import org.eclipse.xtext.conversion.ValueConverterException;
 import org.eclipse.xtext.nodemodel.INode;
 import org.junit.Before;
@@ -67,10 +69,24 @@ public class LONGValueConverter_toValue_Test {
   }
 
   @Test public void should_parse_long() {
-    assertThat(converter.toValue("68", node), equalTo(68L));
+    assertThat(converter.toValue("68", node), equalTo(BigInteger.valueOf(68)));
   }
 
   @Test public void should_parse_negative_long() {
-    assertThat(converter.toValue("-2", node), equalTo(-2L));
+    assertThat(converter.toValue("-2", node), equalTo(BigInteger.valueOf(-2)));
+  }
+
+  @Test public void should_parse_octal() {
+    assertThat(converter.toValue("010", node), equalTo(BigInteger.valueOf(8)));
+  }
+
+  @Test public void should_reject_malformed_octal() {
+    thrown.expect(ValueConverterException.class);
+    converter.toValue("09", node);
+  }
+
+  @Test public void should_preserve_arbitrary_magnitude() {
+    String input = "18446744073709551616";
+    assertThat(converter.toValue(input, node), equalTo(new BigInteger(input)));
   }
 }

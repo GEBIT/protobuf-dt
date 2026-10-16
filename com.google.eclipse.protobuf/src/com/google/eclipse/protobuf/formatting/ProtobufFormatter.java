@@ -22,10 +22,10 @@ import java.util.Set;
 
 import com.google.eclipse.protobuf.services.ProtobufGrammarAccess;
 import com.google.inject.Inject;
+import com.google.eclipse.protobuf.protobuf.Protobuf;
 
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.xtext.Keyword;
-import org.eclipse.xtext.RuleCall;
 import org.eclipse.xtext.TypeRef;
 import org.eclipse.xtext.formatting.impl.AbstractDeclarativeFormatter;
 import org.eclipse.xtext.formatting.impl.FormattingConfig;
@@ -74,6 +74,8 @@ public class ProtobufFormatter extends AbstractDeclarativeFormatter {
     c.setLinewrap(2).after(g.getEnumRule());
     c.setLinewrap(1).after(g.getEnumElementRule());
     c.setLinewrap(1).after(g.getExtensionsRule());
+    c.setLinewrap(1).after(g.getReservedRule());
+    c.setLinewrap(1).after(g.getReservedEnumRule());
     c.setLinewrap(1).after(g.getRpcRule());
     c.setLinewrap(2).after(g.getServiceRule());
     c.setLinewrap(1).after(g.getStreamRule());
@@ -107,18 +109,24 @@ public class ProtobufFormatter extends AbstractDeclarativeFormatter {
     for (Keyword k : g.findKeywords(CLOSING_BRACKET.toString(), ")")) {
       c.setNoSpace().before(k);
     }
+    c.setNoSpace().around(g.getMapTypeAccess().getLessThanSignKeyword_1());
+    c.setNoSpace().before(g.getMapTypeAccess().getGreaterThanSignKeyword_5());
+    c.setSpace(space()).after(g.getMapTypeAccess().getGreaterThanSignKeyword_5());
+    c.setNoSpace().after(g.getAnyFieldNameAccess().getUrlPrefixAssignment_0_0_1());
   }
   
   @Override
 	public ITokenStream createFormatterStream(EObject aContext, String anIndent, ITokenStream anOut,
 			boolean aPreserveWhitespaces) {
-		return super.createFormatterStream(aContext, anIndent, new FirstCommentIndentationFixingTokenStream(anOut),
+		return super.createFormatterStream(aContext, anIndent, new FirstCommentIndentationFixingTokenStream(anOut,
+				aContext == null || aContext instanceof Protobuf),
 				aPreserveWhitespaces);
 	}
 
 	@Override
 	public ITokenStream createFormatterStream(String anIndent, ITokenStream anOut, boolean aPreserveWhitespaces) {
-		return super.createFormatterStream(anIndent, new FirstCommentIndentationFixingTokenStream(anOut), aPreserveWhitespaces);
+		return super.createFormatterStream(anIndent, new FirstCommentIndentationFixingTokenStream(anOut,
+				anIndent == null || anIndent.isEmpty()), aPreserveWhitespaces);
 	}
   
   public class FirstCommentIndentationFixingTokenStream implements ITokenStream {
@@ -130,9 +138,12 @@ public class ProtobufFormatter extends AbstractDeclarativeFormatter {
 	private final TypeRef slCommentType;
 			
 	private boolean lastWasOpening;
+	private final boolean documentStart;
+	private boolean hasText;
 	
-	public FirstCommentIndentationFixingTokenStream(ITokenStream anOut) {
+	public FirstCommentIndentationFixingTokenStream(ITokenStream anOut, boolean documentStart) {
 		out = anOut;
+		this.documentStart = documentStart;
 				
 		ProtobufGrammarAccess g = (ProtobufGrammarAccess) getGrammarAccess();
 		openingCurlyBracketRuleCalls.add(g.getMessageAccess().getLeftCurlyBracketKeyword_2());
@@ -148,6 +159,20 @@ public class ProtobufFormatter extends AbstractDeclarativeFormatter {
 
 	@Override
 	public void writeHidden(EObject grammarElement, String value) throws IOException {
+		// Rule-level before-layout does not introduce blank lines at the document boundary.
+		if (documentStart && !hasText) {
+			boolean whitespace = true;
+			for (int i = 0; i < value.length(); i++) {
+				if (!Character.isWhitespace(value.charAt(i))) {
+					whitespace = false;
+					break;
+				}
+			}
+			if (whitespace) {
+				return;
+			}
+			hasText = true;
+		}
 		// This is a weird-looking fix for an ugly problem/bug in XText declarative formatting
 		// that I don't know how to fix otherwise: the indentation of comments right after an
 		// indentation-increasing grammar element is messed up like this:
@@ -180,6 +205,9 @@ public class ProtobufFormatter extends AbstractDeclarativeFormatter {
 
 	@Override
 	public void writeSemantic(EObject grammarElement, String value) throws IOException {
+		if (!value.isEmpty()) {
+			hasText = true;
+		}
 		out.writeSemantic(grammarElement, value);
 	}
 	  

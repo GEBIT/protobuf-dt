@@ -75,6 +75,11 @@ public class CommentReader {
           if (text.startsWith(" ")) {
             text = text.substring(1);
           }
+          // Consecutive named files may share a source-comment block.
+          if (FileCreator.isFileDirective(text) && !comment.isEmpty()) {
+            comments.add(comment.toString());
+            comment = new MultiLineTextBuilder();
+          }
           comment.append(text);
           continue;
         }

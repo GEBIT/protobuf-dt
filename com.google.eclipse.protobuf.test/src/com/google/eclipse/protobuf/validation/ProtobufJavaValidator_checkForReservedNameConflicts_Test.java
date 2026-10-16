@@ -75,10 +75,6 @@ public class ProtobufJavaValidator_checkForReservedNameConflicts_Test {
         "Name \"bar\" conflicts with reserved \"bar\".",
         xtext.findAll(Group.class).get(0),
         ProtobufPackage.Literals.COMPLEX_TYPE__NAME);
-    verifyError(
-        "Name \"baz\" conflicts with reserved \"baz\".",
-        xtext.findAll(MessageField.class).get(1),
-        ProtobufPackage.Literals.MESSAGE_FIELD__NAME);
   }
 
   // syntax = "proto2";
@@ -111,20 +107,12 @@ public class ProtobufJavaValidator_checkForReservedNameConflicts_Test {
   //     optional bool in_other_group = 3;
   //   }
   // }
-  @Test public void should_error_on_conflict_with_reserved_in_group() {
-    validator.checkForReservedNameConflicts(xtext.findFirst(Message.class));
+  @Test public void should_keep_group_reserved_names_within_the_group() {
+    validator.checkForReservedNameConflicts(xtext.findFirst(Group.class));
     List<MessageField> messageFields = xtext.findAll(MessageField.class);
     verifyError(
         "Name \"in_same_group\" conflicts with reserved \"in_same_group\".",
         messageFields.get(0),
-        ProtobufPackage.Literals.MESSAGE_FIELD__NAME);
-    verifyError(
-        "Name \"outside_group\" conflicts with reserved \"outside_group\".",
-        messageFields.get(1),
-        ProtobufPackage.Literals.MESSAGE_FIELD__NAME);
-    verifyError(
-        "Name \"in_other_group\" conflicts with reserved \"in_other_group\".",
-        messageFields.get(2),
         ProtobufPackage.Literals.MESSAGE_FIELD__NAME);
     verifyNoMoreInteractions(messageAcceptor);
   }

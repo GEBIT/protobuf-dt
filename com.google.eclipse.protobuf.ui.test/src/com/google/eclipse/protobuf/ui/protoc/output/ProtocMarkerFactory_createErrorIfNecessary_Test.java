@@ -13,6 +13,7 @@ import static org.junit.Assert.assertThat;
 
 import static com.google.eclipse.protobuf.junit.stubs.resources.MarkerStub.error;
 import static com.google.eclipse.protobuf.ui.validation.MarkerTypes.EDITOR_CHECK;
+import static com.google.eclipse.protobuf.ui.validation.MarkerTypes.PROTOC_CHECK;
 
 import java.util.List;
 
@@ -30,8 +31,6 @@ import com.google.eclipse.protobuf.junit.stubs.resources.MarkerStub;
  * @author alruiz@google.com (Alex Ruiz)
  */
 public class ProtocMarkerFactory_createErrorIfNecessary_Test {
-  private static final String PROTOC = "com.google.eclipse.protobuf.ui.protocMarker";
-
   private MarkerStub marker;
   private FileStub file;
   private ProtocMarkerFactory markerFactory;
@@ -40,7 +39,7 @@ public class ProtocMarkerFactory_createErrorIfNecessary_Test {
     marker = error(EDITOR_CHECK, "Expected field name.", 68);
     file = new FileStub();
     file.setLocation(Path.fromOSString("home/alex/protos/test1.proto"));
-    file.createMarker(PROTOC);
+    file.createMarker(PROTOC_CHECK);
     file.addMarker(marker);
     markerFactory = new ProtocMarkerFactory(file);
   }
@@ -49,18 +48,18 @@ public class ProtocMarkerFactory_createErrorIfNecessary_Test {
     String message = "File not found.";
     int lineNumber = 8;
     markerFactory.createErrorIfNecessary("test1.proto", lineNumber, message);
-    List<MarkerStub> markers = file.markersOfType(PROTOC);
+    List<MarkerStub> markers = file.markersOfType(PROTOC_CHECK);
     assertThat(markers.size(), equalTo(1));
-    assertThat(markers.get(0), equalTo(error(PROTOC, message, lineNumber)));
+    assertThat(markers.get(0), equalTo(error(PROTOC_CHECK, message, lineNumber)));
   }
 
   @Test public void should_not_create_marker_if_given_path_does_not_match_path_in_file() throws CoreException {
     markerFactory.createErrorIfNecessary("test2.proto", 8, "File not found.");
-    assertThat(file.markerCount(PROTOC), equalTo(0));
+    assertThat(file.markerCount(PROTOC_CHECK), equalTo(0));
   }
 
   @Test public void should_not_create_marker_if_a_similar_one_exists() throws CoreException {
     markerFactory.createErrorIfNecessary("test1.proto", marker.lineNumber(), marker.message());
-    assertThat(file.markerCount(PROTOC), equalTo(0));
+    assertThat(file.markerCount(PROTOC_CHECK), equalTo(0));
   }
 }

@@ -22,7 +22,7 @@ public enum CommonKeyword {
   EQUAL("="), FALSE("false"), FIXED32("fixed32"), FIXED64("fixed64"), FLOAT("float"), INT32("int32"), INT64("int64"),
   NAN("nan"), OPENING_BRACKET("["), OPENING_CURLY_BRACKET("{"), SEMICOLON(";"), SFIXED32("sfixed32"),
   SFIXED64("sfixed64"), STRING("string"), SYNTAX("syntax"), TRUE("true"), SINT32("sint32"), SINT64("sint64"),
-  UINT32("unit32"), UINT64("uint64");
+  UINT32("uint32"), UINT64("uint64");
 
   private final String value;
 

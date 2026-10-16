@@ -81,4 +81,29 @@ public class ProtobufQualifiedNameProvider_getFullyQualifiedName_Test {
     QualifiedName fqn = provider.getFullyQualifiedName(field);
     assertThat(fqn.toString(), equalTo("Person.name"));
   }
+
+  // syntax = "proto3";
+  // package names;
+  // message M { oneof choice { string member = 1; } enum E { VALUE = 0; } }
+  @Test public void should_export_oneof_fields_and_enum_values_in_enclosing_scope() {
+    assertThat(provider.getFullyQualifiedName(xtext.find("member", MessageField.class)).toString(),
+        equalTo("names.M.member"));
+    assertThat(provider.getFullyQualifiedName(xtext.find("choice", com.google.eclipse.protobuf.protobuf.OneOf.class)).toString(),
+        equalTo("names.M.choice"));
+    assertThat(provider.getFullyQualifiedName(xtext.find("VALUE", com.google.eclipse.protobuf.protobuf.Literal.class)).toString(),
+        equalTo("names.M.VALUE"));
+    assertThat(provider.getFullyQualifiedName(xtext.find("E", com.google.eclipse.protobuf.protobuf.Enum.class)).toString(),
+        equalTo("names.M.E"));
+  }
+
+  // syntax = "proto2";
+  // package same;
+  // message same { optional same child = 1; }
+  @Test public void should_qualify_local_names_even_when_they_match_the_package() {
+    Message message = xtext.findFirst(Message.class);
+    MessageField child = xtext.findFirst(MessageField.class);
+    assertThat(provider.getFullyQualifiedName(message).toString(), equalTo("same.same"));
+    assertThat(provider.getFullyQualifiedName(child).toString(), equalTo("same.same.child"));
+    assertThat(((com.google.eclipse.protobuf.protobuf.ComplexTypeLink) child.getType()).getTarget(), equalTo(message));
+  }
 }

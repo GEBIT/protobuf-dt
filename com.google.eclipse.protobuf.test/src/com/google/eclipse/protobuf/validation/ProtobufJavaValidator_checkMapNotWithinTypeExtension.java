@@ -8,68 +8,50 @@
  */
 package com.google.eclipse.protobuf.validation;
 
-import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
+import static com.google.eclipse.protobuf.junit.core.IntegrationTestModule.integrationTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import java.util.List;
+
 import com.google.eclipse.protobuf.junit.core.XtextRule;
 import com.google.eclipse.protobuf.protobuf.MapType;
-import com.google.eclipse.protobuf.protobuf.MapTypeLink;
-import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.inject.Inject;
 
-import org.eclipse.xtext.validation.ValidationMessageAcceptor;
-import org.junit.Before;
+import org.eclipse.emf.ecore.util.EcoreUtil;
+import org.eclipse.xtext.diagnostics.Severity;
+import org.eclipse.xtext.validation.CheckMode;
+import org.eclipse.xtext.validation.IResourceValidator;
+import org.eclipse.xtext.validation.Issue;
 import org.junit.Rule;
 import org.junit.Test;
 
-/**
- * Tests for <code>{@link ProtobufJavaValidator#checkMapIsNotWithinExtension(MapType)}</code>
- */
+/** Tests map ownership at an extension boundary and inside its group type. */
 public class ProtobufJavaValidator_checkMapNotWithinTypeExtension {
-  @Rule public XtextRule xtext = overrideRuntimeModuleWith(unitTestModule());
+  @Rule public XtextRule xtext = overrideRuntimeModuleWith(integrationTestModule());
 
-  @Inject private ProtobufJavaValidator validator;
-  private ValidationMessageAcceptor messageAcceptor;
+  @Inject private IResourceValidator validator;
 
-  @Before public void setUp() {
-    messageAcceptor = mock(ValidationMessageAcceptor.class);
-    validator.setMessageAcceptor(messageAcceptor);
+  @Test public void should_reject_a_map_declared_directly_as_an_extension() {
+    xtext.parseText("syntax = 'proto2'; message Host { extensions 100 to 200; } "
+        + "extend Host { map<string, string> entries = 100; }");
+    List<Issue> issues = validate();
+    assertEquals(issues.toString(), 1, issues.size());
+    assertEquals(Severity.ERROR, issues.get(0).getSeverity());
+    assertEquals(EcoreUtil.getURI(xtext.findFirst(MapType.class)), issues.get(0).getUriToProblem());
   }
 
-  // syntax = "proto2";
-  //
-  // extend proto2.FieldOptions {
-  //   map<string, string> bar = 1;
-  // }
-  @Test public void should_create_error_if_map_within_type_extension() {
-    MessageField field = xtext.find("bar", MessageField.class);
-    MapType map = ((MapTypeLink) field.getType()).getTarget();
-    validator.checkMapIsNotWithinExtension(map);
-    verify(messageAcceptor).acceptError(
-        Messages.mapWithinTypeExtension,
-        map,
-        null,
-        ValidationMessageAcceptor.INSIGNIFICANT_INDEX,
-        null);
+  @Test public void should_allow_a_map_in_the_body_of_a_group_extension() {
+    xtext.parseText("syntax = 'proto2'; message Host { extensions 100 to 200; } "
+        + "extend Host { optional group Detail = 100 { map<string, string> entries = 1; } }");
+    List<Issue> issues = validate();
+    assertTrue(issues.toString(), issues.isEmpty());
   }
 
-  // syntax = "proto2";
-  //
-  // extend proto2.FieldOptions {
-  //   optional group my_group = 1 {
-  //     map<string, string> bar = 2;
-  //   }
-  // }
-  @Test public void should_create_error_if_map_within_group_within_type_extension() {
-    MessageField field = xtext.find("bar", MessageField.class);
-    MapType map = ((MapTypeLink) field.getType()).getTarget();
-    validator.checkMapIsNotWithinExtension(map);
-    verify(messageAcceptor).acceptError(
-        Messages.mapWithinTypeExtension,
-        map,
-        null,
-        ValidationMessageAcceptor.INSIGNIFICANT_INDEX,
-        null);
+  private List<Issue> validate() {
+    List<Issue> issues = validator.validate(xtext.resource(), CheckMode.ALL, null);
+    assertTrue(xtext.resource().getErrors().toString(), xtext.resource().getErrors().isEmpty());
+    return issues;
   }
 }

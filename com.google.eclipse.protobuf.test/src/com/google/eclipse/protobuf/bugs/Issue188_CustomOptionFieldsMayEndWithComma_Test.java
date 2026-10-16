@@ -60,5 +60,9 @@ public class Issue188_CustomOptionFieldsMayEndWithComma_Test {
     ComplexValue value = (ComplexValue) option.getValue();
     List<ValueField> fields = value.getFields();
     assertThat(fields.size(), equalTo(3));
+    java.util.List<org.eclipse.xtext.validation.Issue> issues = xtext.injector()
+        .getInstance(org.eclipse.xtext.validation.IResourceValidator.class)
+        .validate(xtext.resource(), org.eclipse.xtext.validation.CheckMode.ALL, null);
+    org.junit.Assert.assertTrue(issues.toString(), issues.isEmpty());
   }
 }

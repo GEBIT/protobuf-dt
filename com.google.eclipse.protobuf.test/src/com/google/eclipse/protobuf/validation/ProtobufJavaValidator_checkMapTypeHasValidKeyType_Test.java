@@ -8,141 +8,58 @@
  */
 package com.google.eclipse.protobuf.validation;
 
-import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
+import static com.google.eclipse.protobuf.junit.core.IntegrationTestModule.integrationTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
-import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.MAP_TYPE__KEY_TYPE;
-import static com.google.eclipse.protobuf.validation.Messages.invalidMapKeyType;
 import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.INVALID_MAP_KEY_TYPE_ERROR;
-import static org.eclipse.xtext.validation.ValidationMessageAcceptor.INSIGNIFICANT_INDEX;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.junit.Assert.assertTrue;
 
 import com.google.eclipse.protobuf.junit.core.XtextRule;
-import com.google.eclipse.protobuf.protobuf.MapType;
-import com.google.eclipse.protobuf.protobuf.MapTypeLink;
-import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.inject.Inject;
 
-import org.eclipse.xtext.validation.ValidationMessageAcceptor;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 
 /**
- * Tests for <code>{@link ProtobufJavaValidator#checkMapTypeHasValidKeyType(MapType)}</code>
+ * Resource-level map key and nested-map diagnostics.
  */
 public class ProtobufJavaValidator_checkMapTypeHasValidKeyType_Test {
-  @Rule public XtextRule xtext = overrideRuntimeModuleWith(unitTestModule());
+  @Rule public XtextRule xtext = overrideRuntimeModuleWith(integrationTestModule());
 
-  @Inject private ProtobufJavaValidator validator;
-  private ValidationMessageAcceptor messageAcceptor;
+  @Inject private org.eclipse.xtext.validation.IResourceValidator resourceValidator;
 
-  @Before public void setUp() {
-    messageAcceptor = mock(ValidationMessageAcceptor.class);
-    validator.setMessageAcceptor(messageAcceptor);
+  @Test public void should_validate_each_legal_map_key_in_both_dialects() {
+    String[] keys = {"bool", "string", "int32", "int64", "uint32", "uint64", "sint32", "sint64",
+        "fixed32", "fixed64", "sfixed32", "sfixed64"};
+    for (String dialect : new String[] {"proto2", "proto3"}) {
+      for (String key : keys) {
+        xtext.parseText("syntax = '" + dialect + "'; message LegalMap { map<" + key + ", int32> entries = 1; }");
+        java.util.List<org.eclipse.xtext.validation.Issue> issues = validateResource();
+        assertTrue(dialect + " " + key + ": " + issues, issues.isEmpty());
+      }
+    }
   }
 
-  // syntax = "proto2";
-  //
-  // message Bar {}
-  //
-  // message Foo {
-  //   map<Bar, string> bar = 1;
-  // }
-  @Test public void should_create_error_if_key_type_is_message() {
-    MessageField field = xtext.find("bar", MessageField.class);
-    MapType map = ((MapTypeLink) field.getType()).getTarget();
-    validator.checkMapTypeHasValidKeyType(map);
-    verify(messageAcceptor).acceptError(invalidMapKeyType, map, MAP_TYPE__KEY_TYPE,
-        INSIGNIFICANT_INDEX, INVALID_MAP_KEY_TYPE_ERROR);
+  @Test public void should_reject_nonintegral_complex_and_nested_map_keys_as_semantics_not_link_errors() {
+    for (String key : new String[] {"float", "double", "bytes", "E", "M", "map<string, int32>"}) {
+      xtext.parseText("syntax = 'proto3'; enum E { ZERO = 0; } message M {} "
+          + "message InvalidMap { map<" + key + ", int32> entries = 1; }");
+      java.util.List<org.eclipse.xtext.validation.Issue> issues = validateResource();
+      assertTrue(key + ": " + issues, issues.stream().anyMatch(
+          issue -> INVALID_MAP_KEY_TYPE_ERROR.equals(issue.getCode())));
+    }
   }
 
-  // syntax = "proto2";
-  //
-  // message Foo {
-  //   map<double, string> bar = 1;
-  // }
-  @Test public void should_create_error_if_key_type_is_double() {
-    MessageField field = xtext.find("bar", MessageField.class);
-    MapType map = ((MapTypeLink) field.getType()).getTarget();
-    validator.checkMapTypeHasValidKeyType(map);
-    verify(messageAcceptor).acceptError(invalidMapKeyType, map, MAP_TYPE__KEY_TYPE,
-        INSIGNIFICANT_INDEX, INVALID_MAP_KEY_TYPE_ERROR);
+  @Test public void should_reject_nested_map_values_with_the_existing_targeted_code() {
+    xtext.parseText("syntax = 'proto3'; message NestedMap { map<string, map<string, int32>> entries = 1; }");
+    java.util.List<org.eclipse.xtext.validation.Issue> issues = validateResource();
+    assertTrue(issues.toString(), issues.stream().anyMatch(
+        issue -> ProtobufJavaValidator.MAP_WITH_MAP_VALUE_TYPE_ERROR.equals(issue.getCode())));
   }
 
-  // syntax = "proto2";
-  //
-  // message Foo {
-  //   map<float, string> bar = 1;
-  // }
-  @Test public void should_create_error_if_key_type_is_float() {
-    MessageField field = xtext.find("bar", MessageField.class);
-    MapType map = ((MapTypeLink) field.getType()).getTarget();
-    validator.checkMapTypeHasValidKeyType(map);
-    verify(messageAcceptor).acceptError(invalidMapKeyType, map, MAP_TYPE__KEY_TYPE,
-        INSIGNIFICANT_INDEX, INVALID_MAP_KEY_TYPE_ERROR);
-  }
-
-  // syntax = "proto2";
-  //
-  // message Foo {
-  //   map<bytes, string> bar = 1;
-  // }
-  @Test public void should_create_error_if_key_type_is_bytes() {
-    MessageField field = xtext.find("bar", MessageField.class);
-    MapType map = ((MapTypeLink) field.getType()).getTarget();
-    validator.checkMapTypeHasValidKeyType(map);
-    verify(messageAcceptor).acceptError(invalidMapKeyType, map, MAP_TYPE__KEY_TYPE,
-        INSIGNIFICANT_INDEX, INVALID_MAP_KEY_TYPE_ERROR);
-  }
-
-  // syntax = "proto2";
-  //
-  // message Foo {
-  //   map<map<string, string>, string> bar = 1;
-  // }
-  @Test public void should_create_error_if_key_type_is_map() {
-    MessageField field = xtext.find("bar", MessageField.class);
-    MapType map = ((MapTypeLink) field.getType()).getTarget();
-    validator.checkMapTypeHasValidKeyType(map);
-    verify(messageAcceptor).acceptError(invalidMapKeyType, map, MAP_TYPE__KEY_TYPE,
-        INSIGNIFICANT_INDEX, INVALID_MAP_KEY_TYPE_ERROR);
-  }
-
-  // syntax = "proto2";
-  //
-  // message Foo {
-  //   map<bool, string> bar = 1;
-  // }
-  @Test public void should_not_create_error_if_key_type_is_bool() {
-    MessageField field = xtext.find("bar", MessageField.class);
-    MapType map = ((MapTypeLink) field.getType()).getTarget();
-    validator.checkMapTypeHasValidKeyType(map);
-    verifyZeroInteractions(messageAcceptor);
-  }
-
-  // syntax = "proto2";
-  //
-  // message Foo {
-  //   map<int32, string> bar = 1;
-  // }
-  @Test public void should_not_create_error_if_key_type_is_scalar() {
-    MessageField field = xtext.find("bar", MessageField.class);
-    MapType map = ((MapTypeLink) field.getType()).getTarget();
-    validator.checkMapTypeHasValidKeyType(map);
-    verifyZeroInteractions(messageAcceptor);
-  }
-
-  // syntax = "proto2";
-  //
-  // message Foo {
-  //   map<string, string> bar = 1;
-  // }
-  @Test public void should_not_create_error_if_key_type_is_string() {
-    MessageField field = xtext.find("bar", MessageField.class);
-    MapType map = ((MapTypeLink) field.getType()).getTarget();
-    validator.checkMapTypeHasValidKeyType(map);
-    verifyZeroInteractions(messageAcceptor);
+  private java.util.List<org.eclipse.xtext.validation.Issue> validateResource() {
+    java.util.List<org.eclipse.xtext.validation.Issue> issues = resourceValidator.validate(
+        xtext.resource(), org.eclipse.xtext.validation.CheckMode.ALL, null);
+    assertTrue(xtext.resource().getErrors().toString(), xtext.resource().getErrors().isEmpty());
+    return issues;
   }
 }

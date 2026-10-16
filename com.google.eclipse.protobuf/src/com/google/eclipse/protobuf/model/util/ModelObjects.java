@@ -51,6 +51,9 @@ import com.google.inject.Singleton;
    */
   public Package packageOf(EObject o) {
     Protobuf root = rootOf(o);
+    if (root == null) {
+      return null;
+    }
     for (ProtobufElement e : root.getElements()) {
       if (e instanceof Package) {
         return (Package) e;
@@ -65,8 +68,11 @@ import com.google.inject.Singleton;
    * @return the root element containing the given model element.
    */
   public Protobuf rootOf(EObject o) {
+    if (o == null || o.eResource() == null) {
+      return null;
+    }
     EObject current = o;
-    while (!(current instanceof Protobuf)) {
+    while (current != null && !(current instanceof Protobuf)) {
       current = current.eContainer();
     }
     return (Protobuf) current;

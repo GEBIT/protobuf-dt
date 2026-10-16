@@ -9,14 +9,7 @@
 package com.google.eclipse.protobuf.ui.contentassist;
 
 import static com.google.eclipse.protobuf.grammar.CommonKeyword.CLOSING_BRACKET;
-import static com.google.eclipse.protobuf.grammar.CommonKeyword.EQUAL;
-import static com.google.eclipse.protobuf.grammar.CommonKeyword.FALSE;
-import static com.google.eclipse.protobuf.grammar.CommonKeyword.NAN;
-import static com.google.eclipse.protobuf.grammar.CommonKeyword.OPENING_BRACKET;
-import static com.google.eclipse.protobuf.grammar.CommonKeyword.OPENING_CURLY_BRACKET;
 import static com.google.eclipse.protobuf.grammar.CommonKeyword.SYNTAX;
-import static com.google.eclipse.protobuf.grammar.CommonKeyword.TRUE;
-import static com.google.eclipse.protobuf.protobuf.ModifierEnum.OPTIONAL;
 import static com.google.eclipse.protobuf.protobuf.ProtobufPackage.Literals.LITERAL;
 import static com.google.eclipse.protobuf.ui.grammar.CompoundElement.DEFAULT_EQUAL_IN_BRACKETS;
 import static com.google.eclipse.protobuf.ui.grammar.CompoundElement.DEFAULT_EQUAL_STRING_IN_BRACKETS;
@@ -27,35 +20,65 @@ import static com.google.eclipse.protobuf.ui.grammar.CompoundElement.PROTO2_IN_Q
 import static com.google.eclipse.protobuf.ui.grammar.CompoundElement.PROTO3_IN_QUOTES;
 import static com.google.eclipse.protobuf.util.CommonWords.space;
 import static java.lang.String.valueOf;
-import static org.eclipse.xtext.EcoreUtil2.getAllContentsOfType;
 import static org.eclipse.xtext.util.Strings.toFirstLower;
 
 import com.google.eclipse.protobuf.grammar.CommonKeyword;
+import java.util.HashSet;
+import java.util.Set;
+
+import com.google.common.base.Predicate;
+import com.google.eclipse.protobuf.model.util.OptionValues;
+import com.google.eclipse.protobuf.model.util.Syntaxes;
+import com.google.eclipse.protobuf.protobuf.ComplexTypeLink;
+import com.google.eclipse.protobuf.protobuf.Extensions;
+import com.google.eclipse.protobuf.protobuf.Group;
+import com.google.eclipse.protobuf.protobuf.JsonNameFieldOption;
+import com.google.eclipse.protobuf.protobuf.MapType;
+import com.google.eclipse.protobuf.protobuf.MapTypeLink;
+import com.google.eclipse.protobuf.protobuf.Message;
+import com.google.eclipse.protobuf.protobuf.OneOf;
+import com.google.eclipse.protobuf.protobuf.ScalarType;
+import com.google.eclipse.protobuf.protobuf.ScalarTypeLink;
+import com.google.eclipse.protobuf.protobuf.TypeExtension;
+import com.google.eclipse.protobuf.protobuf.TypeLink;
+import com.google.eclipse.protobuf.protobuf.ValueField;
+import com.google.eclipse.protobuf.protobuf.OptionField;
+import com.google.eclipse.protobuf.protobuf.Option;
+import com.google.eclipse.protobuf.protobuf.Protobuf;
+import com.google.eclipse.protobuf.protobuf.Rpc;
+import com.google.eclipse.protobuf.protobuf.Service;
+import com.google.eclipse.protobuf.protobuf.Stream;
+import com.google.eclipse.protobuf.scoping.ProtoDescriptorProvider;
+import com.google.eclipse.protobuf.services.ProtobufGrammarAccess;
 import com.google.eclipse.protobuf.model.util.IndexedElements;
 import com.google.eclipse.protobuf.model.util.Literals;
 import com.google.eclipse.protobuf.model.util.MessageFields;
 import com.google.eclipse.protobuf.model.util.Options;
 import com.google.eclipse.protobuf.protobuf.AbstractOption;
 import com.google.eclipse.protobuf.protobuf.ComplexValue;
-import com.google.eclipse.protobuf.protobuf.CustomFieldOption;
-import com.google.eclipse.protobuf.protobuf.CustomOption;
 import com.google.eclipse.protobuf.protobuf.DefaultValueFieldOption;
 import com.google.eclipse.protobuf.protobuf.Enum;
-import com.google.eclipse.protobuf.protobuf.FieldName;
 import com.google.eclipse.protobuf.protobuf.IndexedElement;
 import com.google.eclipse.protobuf.protobuf.Literal;
 import com.google.eclipse.protobuf.protobuf.MessageField;
-import com.google.eclipse.protobuf.protobuf.ModifierEnum;
-import com.google.eclipse.protobuf.protobuf.Option;
-import com.google.eclipse.protobuf.protobuf.SimpleValueField;
 import com.google.eclipse.protobuf.ui.grammar.CompoundElement;
 import com.google.eclipse.protobuf.ui.labeling.Images;
 import com.google.inject.Inject;
 
 import org.eclipse.emf.ecore.EObject;
+import org.eclipse.emf.ecore.util.EcoreUtil;
+import org.eclipse.emf.ecore.resource.Resource;
+import org.eclipse.xtext.AbstractRule;
+import org.eclipse.xtext.CrossReference;
+import org.eclipse.xtext.EcoreUtil2;
+import org.eclipse.xtext.naming.IQualifiedNameProvider;
+import org.eclipse.xtext.naming.QualifiedName;
+import org.eclipse.xtext.nodemodel.ILeafNode;
+import org.eclipse.xtext.nodemodel.INode;
+import org.eclipse.xtext.nodemodel.util.NodeModelUtils;
+import org.eclipse.xtext.resource.IEObjectDescription;
 import org.eclipse.jface.text.contentassist.ICompletionProposal;
 import org.eclipse.jface.viewers.StyledString;
-import org.eclipse.swt.custom.StyledText;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.xtext.Assignment;
 import org.eclipse.xtext.Keyword;
@@ -77,7 +100,80 @@ public class ProtobufProposalProvider extends AbstractProtobufProposalProvider {
   @Inject private PluginImageHelper imageHelper;
   @Inject private Literals literals;
   @Inject private MessageFields messageFields;
+  @Inject private OptionValues optionValues;
+  @Inject private Syntaxes syntaxes;
+  @Inject private IQualifiedNameProvider qualifiedNames;
   @Inject private Options options;
+  @Inject private ProtoDescriptorProvider descriptorProvider;
+  @Inject private ProtobufGrammarAccess grammar;
+  private ContentAssistContext proposalContext;
+  private String proposalMapPosition;
+  private String proposalStatement;
+  private String proposalLastToken;
+  private boolean proposalRangeOptions;
+  private boolean proposalRangeRoot;
+  private int proposalRangeAggregateDepth;
+  private boolean proposalRangeValue;
+  private String proposalRangeOption;
+
+  @Override public void createProposals(ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
+    String prefix = context.getPrefix();
+    if (prefix.length() == 1 && "([=,:.<{".indexOf(prefix.charAt(0)) >= 0) {
+      context = context.copy().setPrefix("")
+          .setReplaceRegion(new org.eclipse.jface.text.Region(context.getOffset(), 0)).toContext();
+    }
+    proposalContext = context;
+    proposalMapPosition = calculateMapPosition(context);
+    try {
+      if ("key".equals(proposalMapPosition)) {
+        for (ScalarType type : ScalarType.VALUES) {
+          if (type != ScalarType.DOUBLE && type != ScalarType.FLOAT && type != ScalarType.BYTES) {
+            proposeAndAccept(type.toString(), context, acceptor);
+          }
+        }
+        return;
+      }
+      if (proposalRangeOptions && proposalRangeRoot && (proposalRangeValue || "[".equals(proposalLastToken)
+          || ",".equals(proposalLastToken) || !context.getPrefix().isEmpty())) {
+        if (proposalRangeValue) {
+          proposeFieldValue(rangeOptionType(context), context, acceptor);
+        } else {
+          proposeNativeOptions(context, acceptor);
+        }
+        return;
+      }
+      if (proposalRangeOptions && proposalRangeAggregateDepth == 1
+          && ("{".equals(proposalLastToken) || ",".equals(proposalLastToken)
+              || ";".equals(proposalLastToken) || !context.getPrefix().isEmpty())) {
+        proposeMembers(rangeOptionType(context), false, context, acceptor);
+        return;
+      }
+      if ("option".equals(proposalStatement) && "(".equals(proposalLastToken)) {
+        lookupCrossReference(grammar.getOptionSourceAccess().getTargetIndexedElementCrossReference_0(), context, acceptor);
+        return;
+      }
+      super.createProposals(context, acceptor);
+    } finally {
+      proposalContext = null;
+      proposalMapPosition = null;
+      proposalStatement = null;
+      proposalLastToken = null;
+      proposalRangeOptions = false;
+      proposalRangeRoot = false;
+      proposalRangeAggregateDepth = 0;
+      proposalRangeValue = false;
+      proposalRangeOption = null;
+    }
+  }
+
+  private EObject rangeOptionType(ContentAssistContext context) {
+    for (MessageField field : messageFields.fieldsOf(nativeOptionsMessage(context))) {
+      if (field.getName().equals(proposalRangeOption)) {
+        return optionValues.typeOf(field);
+      }
+    }
+    return null;
+  }
 
   @Override public void completeProtobuf_Syntax(EObject model, Assignment assignment, ContentAssistContext context,
       ICompletionProposalAcceptor acceptor) {}
@@ -105,61 +201,180 @@ public class ProtobufProposalProvider extends AbstractProtobufProposalProvider {
 
   @Override public void completeKeyword(Keyword keyword, ContentAssistContext context,
       ICompletionProposalAcceptor acceptor) {
-    if (keyword == null) {
+    if (keyword == null || !isKeywordAllowed(keyword, context)) {
       return;
     }
-    boolean proposalWasHandledAlready = completeKeyword(keyword.getValue(), context, acceptor);
-    if (proposalWasHandledAlready) {
+    AbstractRule rule = EcoreUtil2.getContainerOfType(keyword, AbstractRule.class);
+    String ruleName = rule == null ? "" : rule.getName();
+    // A reserved word in Name is an identifier, not a declaration/modifier proposal.
+    if ("SafeReservedWord".equals(ruleName) || "ReservedWord".equals(ruleName)) {
+      super.completeKeyword(keyword, context, acceptor);
+      return;
+    }
+    if ("=".equals(keyword.getValue()) && context.getLastCompleteNode() != null
+        && isKeyword(context.getLastCompleteNode().getGrammarElement(), SYNTAX)) {
+      proposeEqualProto2(context, acceptor);
+      proposeEqualProto3(context, acceptor);
+      return;
+    }
+    if ("[".equals(keyword.getValue()) && "MessageField".equals(ruleName)
+        && proposeOpeningBracket(context, acceptor)) {
       return;
     }
     super.completeKeyword(keyword, context, acceptor);
   }
 
-  private boolean completeKeyword(String keyword, ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
-    if (isLastWordFromCaretPositionEqualTo(keyword, context)) {
-      return true;
+  private boolean isKeywordAllowed(Keyword keyword, ContentAssistContext context) {
+    AbstractRule rule = EcoreUtil2.getContainerOfType(keyword, AbstractRule.class);
+    String ruleName = rule == null ? "" : rule.getName();
+    String word = keyword.getValue();
+    EObject model = semanticContext(context);
+    if ("Modifier".equals(ruleName)) {
+      MessageField field = enclosing(context, MessageField.class);
+      return enclosing(context, OneOf.class) == null
+          && (field == null || !(field.getType() instanceof MapTypeLink))
+          && !("required".equals(word) && syntaxes.isProto3(model));
     }
-    if (EQUAL.hasValue(keyword)) {
-      EObject grammarElement = context.getLastCompleteNode().getGrammarElement();
-      if (isKeyword(grammarElement, SYNTAX)) {
-        proposeEqualProto2(context, acceptor);
-        proposeEqualProto3(context, acceptor);
-      }
-      return true;
-    }
-    if (OPENING_BRACKET.hasValue(keyword)) {
-      return proposeOpeningBracket(context, acceptor);
-    }
-    if (OPENING_CURLY_BRACKET.hasValue(keyword)) {
-      EObject model = context.getCurrentModel();
-      return model instanceof Option || model instanceof ComplexValue;
-    }
-    if (TRUE.hasValue(keyword) || FALSE.hasValue(keyword)) {
-      if (isBoolProposalValid(context)) {
-        proposeBooleanValues(context, acceptor);
-      }
-      return true;
-    }
-    if (NAN.hasValue(keyword)) {
-      if (isNanProposalValid(context)) {
-        proposeAndAccept(keyword.toString(), context, acceptor);
-      }
-      return true;
-    }
-    // remove keyword proposals when current node is "]". At this position we
-    // only accept "default" or field options.
-    return context.getCurrentNode().getText().equals(CLOSING_BRACKET.toString());
-  }
-
-  private boolean isLastWordFromCaretPositionEqualTo(String word, ContentAssistContext context) {
-    StyledText styledText = context.getViewer().getTextWidget();
-    int valueLength = word.length();
-    int start = styledText.getCaretOffset() - valueLength;
-    if (start < 0) {
+    if ("OneOf".equals(ruleName) && "repeated".equals(word)) {
       return false;
     }
-    String previousWord = styledText.getTextRange(start, valueLength);
-    return word.equals(previousWord);
+    if ("MapType".equals(ruleName) && "map".equals(word)) {
+      return enclosing(context, OneOf.class) == null && enclosing(context, TypeExtension.class) == null
+          && mapPosition(context) == null;
+    }
+    if ("ScalarType".equals(ruleName) && mapKeyPosition(context)) {
+      return !"double".equals(word) && !"float".equals(word) && !"bytes".equals(word);
+    }
+    if (("Group".equals(ruleName) && "group".equals(word)
+        || "Extensions".equals(ruleName) && "extensions".equals(word)
+        || "Stream".equals(ruleName) && "stream".equals(word)) && syntaxes.isProto3(model)) {
+      return false;
+    }
+    if ("Extensions".equals(ruleName) && "extensions".equals(word)
+        && enclosing(context, OneOf.class) != null) {
+      return false;
+    }
+    if ("DefaultValueFieldOption".equals(ruleName) && "default".equals(word)) {
+      return messageFields.supportsExplicitDefault(enclosing(context, MessageField.class));
+    }
+    if ("JsonNameFieldOption".equals(ruleName) && "json_name".equals(word)) {
+      return enclosing(context, MessageField.class) != null && enclosing(context, TypeExtension.class) == null;
+    }
+    return true;
+  }
+
+  private <T extends EObject> T enclosing(ContentAssistContext context, Class<T> type) {
+    T result = containingAtCaret(context.getCurrentModel(), type, context);
+    T candidate = containingAtCaret(semanticContext(context), type, context);
+    if (candidate != null && (result == null
+        || NodeModelUtils.getNode(candidate).getTotalLength() < NodeModelUtils.getNode(result).getTotalLength())) {
+      result = candidate;
+    }
+    return result == null ? containingAtCaret(context.getPreviousModel(), type, context) : result;
+  }
+
+  private <T extends EObject> T containingAtCaret(EObject model, Class<T> type, ContentAssistContext context) {
+    T result = EcoreUtil2.getContainerOfType(model, type);
+    INode node = result == null ? null : NodeModelUtils.getNode(result);
+    return node != null && node.getTotalOffset() <= context.getOffset()
+        && context.getOffset() <= node.getTotalEndOffset() ? result : null;
+  }
+
+  // The completion parser stops before an assignment and can leave currentModel at its owner
+  // (or even at the previous range). The document's node model retains the actual source context.
+  private EObject semanticContext(ContentAssistContext context) {
+    INode node = nodeBeforeCaret(context);
+    return node == null ? context.getCurrentModel() : NodeModelUtils.findActualSemanticObjectFor(node);
+  }
+
+  private INode nodeBeforeCaret(ContentAssistContext context) {
+    INode root = context.getResource().getParseResult().getRootNode();
+    int offset = Math.max(root.getOffset(), context.getOffset() - context.getPrefix().length() - 1);
+    return NodeModelUtils.findLeafNodeAtOffset(context.getResource().getParseResult().getRootNode(), offset);
+  }
+
+  private String mapPosition(ContentAssistContext context) {
+    return context == proposalContext ? proposalMapPosition : calculateMapPosition(context);
+  }
+
+  private String calculateMapPosition(ContentAssistContext context) {
+    proposalStatement = null;
+    proposalLastToken = null;
+    proposalRangeOptions = false;
+    proposalRangeRoot = false;
+    proposalRangeValue = false;
+    proposalRangeOption = null;
+    // TypeLink's syntactic predicate rejects an incomplete map before it creates any MapType
+    // model/node. Read visible protobuf tokens, not the recovered ComplexTypeLink named "map".
+    boolean map = false;
+    int depth = 0;
+    int braceDepth = 0;
+    int rangeBraceDepth = -1;
+    int rangeBracketDepth = 0;
+    String position = null;
+    for (ILeafNode leaf : context.getResource().getParseResult().getRootNode().getLeafNodes()) {
+      if (leaf.getOffset() >= context.getOffset()) {
+        break;
+      }
+      if (leaf.isHidden()) {
+        continue;
+      }
+      String token = leaf.getText();
+      boolean brace = "{".equals(token) || "}".equals(token);
+      if ("{".equals(token)) {
+        braceDepth++;
+      } else if ("}".equals(token)) {
+        braceDepth--;
+      }
+      if (!proposalRangeOptions && (brace || ";".equals(token))) {
+        proposalStatement = null;
+      } else if (proposalStatement == null && !brace && !";".equals(token)) {
+        proposalStatement = token;
+      }
+      if ("extensions".equals(proposalStatement) && "[".equals(token) && !proposalRangeOptions) {
+        proposalRangeOptions = true;
+        proposalRangeValue = false;
+        rangeBraceDepth = braceDepth;
+        rangeBracketDepth = 1;
+      } else if (proposalRangeOptions) {
+        if ("[".equals(token)) {
+          rangeBracketDepth++;
+        } else if ("]".equals(token) && --rangeBracketDepth == 0) {
+          proposalRangeOptions = false;
+        } else if (braceDepth == rangeBraceDepth && rangeBracketDepth == 1) {
+          if ("=".equals(token)) {
+            proposalRangeValue = true;
+            proposalRangeOption = proposalLastToken;
+          } else if (",".equals(token)) {
+            proposalRangeValue = false;
+          }
+        }
+      }
+      proposalLastToken = token;
+      if (grammar.getMapTypeAccess().getLessThanSignKeyword_1().getValue().equals(token) && map) {
+        depth++;
+        position = "key";
+      } else if (depth > 0) {
+        if (grammar.getMapTypeAccess().getGreaterThanSignKeyword_5().getValue().equals(token)) {
+          if (--depth == 0) {
+            position = null;
+          }
+        } else if (grammar.getMapTypeAccess().getCommaKeyword_3().getValue().equals(token) && depth == 1) {
+          position = "value";
+        } else if (";".equals(token) || "{".equals(token) || "}".equals(token)) {
+          depth = 0;
+          position = null;
+        }
+      }
+      map = grammar.getMapTypeAccess().getMapKeyword_0().getValue().equals(token);
+    }
+    proposalRangeRoot = proposalRangeOptions && braceDepth == rangeBraceDepth && rangeBracketDepth == 1;
+    proposalRangeAggregateDepth = proposalRangeOptions ? braceDepth - rangeBraceDepth : 0;
+    return position;
+  }
+
+  private boolean mapKeyPosition(ContentAssistContext context) {
+    return "key".equals(mapPosition(context));
   }
 
   private boolean isKeyword(EObject object, CommonKeyword keyword) {
@@ -179,29 +394,21 @@ public class ProtobufProposalProvider extends AbstractProtobufProposalProvider {
     proposeAndAccept(proposalText.toString(), context, acceptor);
   }
 
-  private boolean isBoolProposalValid(ContentAssistContext context) {
-    MessageField field = fieldFrom(context);
-    return field != null && messageFields.isBool(field);
-  }
-
-  private boolean isNanProposalValid(ContentAssistContext context) {
-    MessageField field = fieldFrom(context);
-    return field != null && messageFields.isFloatingPointNumber(field);
-  }
-
-  private MessageField fieldFrom(ContentAssistContext context) {
-    EObject model = context.getCurrentModel();
-    if (model instanceof MessageField) {
-      return (MessageField) model;
+  private EObject expectedType(ContentAssistContext context) {
+    EObject model = semanticContext(context);
+    DefaultValueFieldOption option = enclosing(context, DefaultValueFieldOption.class);
+    if (option != null && !messageFields.supportsExplicitDefault(enclosing(context, MessageField.class))) {
+      return null;
     }
-    if (model instanceof AbstractOption) {
-      AbstractOption option = (AbstractOption) model;
-      IndexedElement source = options.rootSourceOf(option);
-      if (source instanceof MessageField) {
-        return (MessageField) source;
-      }
+    if (context.getCurrentModel() instanceof ValueField) {
+      return optionValues.expectedType(context.getCurrentModel());
     }
-    return null;
+    ValueField field = enclosing(context, ValueField.class);
+    if (field != null) {
+      return optionValues.expectedType(field);
+    }
+    AbstractOption assignment = enclosing(context, AbstractOption.class);
+    return optionValues.expectedType(assignment == null ? model : assignment);
   }
 
   private boolean proposeOpeningBracket(ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
@@ -211,8 +418,7 @@ public class ProtobufProposalProvider extends AbstractProtobufProposalProvider {
     }
     if (model instanceof MessageField) {
       MessageField field = (MessageField) model;
-      ModifierEnum modifier = field.getModifier();
-      if (OPTIONAL.equals(modifier)) {
+      if (messageFields.supportsExplicitDefault(field)) {
         CompoundElement display = DEFAULT_EQUAL_IN_BRACKETS;
         int cursorPosition = display.indexOf(CLOSING_BRACKET);
         if (messageFields.isString(field)) {
@@ -220,6 +426,8 @@ public class ProtobufProposalProvider extends AbstractProtobufProposalProvider {
           cursorPosition++;
         }
         createAndAccept(display, cursorPosition, context, acceptor);
+      } else {
+        proposeAndAccept("[", context, acceptor);
       }
       return true;
     }
@@ -245,28 +453,22 @@ public class ProtobufProposalProvider extends AbstractProtobufProposalProvider {
   @Override public void completeLiteral_Index(EObject model, Assignment assignment, ContentAssistContext context,
       ICompletionProposalAcceptor acceptor) {
     long index = literals.calculateNewIndexOf((Literal) model);
-    proposeIndex(index, context, acceptor);
+    if (index != Long.MIN_VALUE) {
+      proposeIndex(index, context, acceptor);
+    }
   }
 
   @Override public void completeLiteralLink_Target(EObject model, Assignment assignment, ContentAssistContext context,
       ICompletionProposalAcceptor acceptor) {
-    MessageField field = null;
-    if (model instanceof DefaultValueFieldOption) {
-      field = (MessageField) model.eContainer();
-    }
-    if (field == null || !messageFields.isOptional(field)) {
-      return;
-    }
-    Enum enumType = messageFields.enumTypeOf(field);
-    if (enumType != null) {
-      proposeAndAccept(enumType, context, acceptor);
-    }
+    proposeFieldValue(expectedType(context), context, acceptor);
   }
 
   @Override public void completeMessageField_Index(EObject model, Assignment assignment, ContentAssistContext context,
       ICompletionProposalAcceptor acceptor) {
     long index = indexedElements.calculateNewIndexFor((MessageField) model);
-    proposeIndex(index, context, acceptor);
+    if (index != -1L) {
+      proposeIndex(index, context, acceptor);
+    }
   }
 
   private void proposeIndex(long index, ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
@@ -275,20 +477,60 @@ public class ProtobufProposalProvider extends AbstractProtobufProposalProvider {
 
   @Override public void completeMessageField_Name(EObject model, Assignment assignment, ContentAssistContext context,
       ICompletionProposalAcceptor acceptor) {
-    String typeName = toFirstLower(messageFields.typeNameOf((MessageField) model));
-    int index = 1;
-    String name = typeName + index;
-    for (EObject o : model.eContainer().eContents()) {
-      if (o == model || !(o instanceof MessageField)) {
-        continue;
+    proposeReservedNames(context, acceptor);
+    MessageField field = extractElementFromContext(context, MessageField.class);
+    if (field == null) {
+      return;
+    }
+    TypeLink link = field.getType();
+    boolean map = link instanceof MapTypeLink;
+    if (map) {
+      MapType target = ((MapTypeLink) link).getTarget();
+      link = target == null ? null : target.getValueType();
+    }
+    String typeName = null;
+    if (link instanceof ScalarTypeLink && ((ScalarTypeLink) link).getTarget() != null) {
+      typeName = ((ScalarTypeLink) link).getTarget().getName();
+    } else if (link instanceof ComplexTypeLink) {
+      EObject target = ((ComplexTypeLink) link).getTarget();
+      QualifiedName name = target == null || target.eIsProxy() ? null : qualifiedNames.getFullyQualifiedName(target);
+      typeName = name == null ? null : name.getLastSegment();
+    }
+    if (typeName == null || typeName.isEmpty()) {
+      return;
+    }
+    String base = toFirstLower(typeName) + (map ? "Map" : "");
+    Set<String> used = new HashSet<String>();
+    Message owner = EcoreUtil2.getContainerOfType(field, Message.class);
+    if (owner != null) {
+      for (MessageField sibling : messageFields.fieldsOf(owner)) {
+        if (sibling != field) {
+          used.add(sibling.getName());
+        }
       }
-      MessageField field = (MessageField) o;
-      if (!name.equals(field.getName())) {
-        continue;
+      for (EObject sibling : owner.getElements()) {
+        Object name = sibling.eClass().getEStructuralFeature("name") == null ? null
+            : sibling.eGet(sibling.eClass().getEStructuralFeature("name"));
+        if (sibling != field && name instanceof String) {
+          used.add((String) name);
+        }
       }
-      name = typeName + (++index);
+    }
+    int index = map ? 0 : 1;
+    String name = map ? base : base + index;
+    while (used.contains(name)) {
+      name = base + (++index);
     }
     proposeAndAccept(name, context, acceptor);
+  }
+
+  private void proposeReservedNames(ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
+    for (Keyword keyword : EcoreUtil2.getAllContentsOfType(grammar.getReservedWordRule(), Keyword.class)) {
+      proposeAndAccept(keyword.getValue(), context, acceptor);
+    }
+    for (Keyword keyword : EcoreUtil2.getAllContentsOfType(grammar.getSafeReservedWordRule(), Keyword.class)) {
+      proposeAndAccept(keyword.getValue(), context, acceptor);
+    }
   }
 
   private void proposeAndAccept(String proposalText, ContentAssistContext context,
@@ -307,41 +549,9 @@ public class ProtobufProposalProvider extends AbstractProtobufProposalProvider {
 
   @Override public void completeDefaultValueFieldOption_Value(EObject model, Assignment assignment,
       ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
-    MessageField field = null;
-    if (model instanceof DefaultValueFieldOption) {
-      field = (MessageField) model.eContainer();
-    }
-    if (model instanceof MessageField) {
-      field = (MessageField) model;
-    }
-    if (field == null || !messageFields.isOptional(field)) {
-      return;
-    }
-    proposeFieldValue(field, context, acceptor);
-  }
-
-  private boolean proposePrimitiveValues(MessageField field, ContentAssistContext context,
-      ICompletionProposalAcceptor acceptor) {
-    if (messageFields.isBool(field)) {
-      proposeBooleanValues(context, acceptor);
-      return true;
-    }
-    if (messageFields.isString(field)) {
-      proposeEmptyString(context, acceptor);
-      return true;
-    }
-    return false;
-  }
-
-  private void proposeBooleanValues(ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
-    CommonKeyword[] keywords = { FALSE, TRUE };
-    proposeAndAccept(keywords, context, acceptor);
-  }
-
-  private void proposeAndAccept(CommonKeyword[] keywords, ContentAssistContext context,
-      ICompletionProposalAcceptor acceptor) {
-    for (CommonKeyword keyword : keywords) {
-      proposeAndAccept(keyword.toString(), context, acceptor);
+    MessageField field = enclosing(context, MessageField.class);
+    if (messageFields.supportsExplicitDefault(field)) {
+      proposeFieldValue(optionValues.typeOf(field), context, acceptor);
     }
   }
 
@@ -359,92 +569,321 @@ public class ProtobufProposalProvider extends AbstractProtobufProposalProvider {
     acceptor.accept(proposal);
   }
 
-  @Override public void completeOptionSource_Target(EObject model, Assignment assignment,
-      ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
+  @Override protected void lookupCrossReference(final CrossReference reference, final ContentAssistContext context,
+      ICompletionProposalAcceptor acceptor) {
+    final AbstractRule rule = EcoreUtil2.getContainerOfType(reference, AbstractRule.class);
+    final String ruleName = rule == null ? "" : rule.getName();
+    if ("NativeOptionSource".equals(ruleName)) {
+      proposeNativeOptions(context, acceptor);
+      return;
+    }
+    if ("MessageOptionField".equals(ruleName)) {
+      proposeMembers(optionPathParentType(context), false, context, acceptor);
+      return;
+    }
+    if ("NormalFieldName".equals(ruleName)) {
+      ComplexValue aggregate = enclosing(context, ComplexValue.class);
+      proposeMembers(optionValues.expectedType(aggregate), false, context, acceptor);
+      return;
+    }
+    if ("LiteralLink".equals(ruleName)) {
+      proposeFieldValue(expectedType(context), context, acceptor);
+      return;
+    }
+    final EObject extensionType;
+    if ("OptionSource".equals(ruleName)) {
+      extensionType = nativeOptionsMessage(context);
+    } else if ("ExtensionOptionField".equals(ruleName)) {
+      extensionType = optionPathParentType(context);
+    } else if ("ExtensionFieldName".equals(ruleName)) {
+      extensionType = optionValues.expectedType(enclosing(context, ComplexValue.class));
+    } else {
+      extensionType = null;
+    }
+    lookupCrossReference(reference, context, acceptor, new Predicate<IEObjectDescription>() {
+      @Override public boolean apply(IEObjectDescription description) {
+        EObject target = EcoreUtil.resolve(description.getEObjectOrProxy(), context.getResource());
+        if ("OptionSource".equals(ruleName) || "ExtensionOptionField".equals(ruleName)
+            || "ExtensionFieldName".equals(ruleName)) {
+          if (extensionType == null || !(target instanceof IndexedElement)
+              || !(target.eContainer() instanceof TypeExtension)) {
+            return false;
+          }
+          TypeExtension extension = (TypeExtension) target.eContainer();
+          if (extension.getType() == null || extension.getType().getTarget() != extensionType) {
+            return false;
+          }
+        }
+        if ("ComplexTypeLink".equals(ruleName)) {
+          if (mapKeyPosition(context)) {
+            return false;
+          }
+          if (target instanceof Enum && syntaxes.isProto3(semanticContext(context))
+              && syntaxes.isProto2(target)) {
+            return false;
+          }
+        }
+        if ("ExtensibleTypeLink".equals(ruleName) && syntaxes.isProto3(semanticContext(context))) {
+          return isOptionExtendee(target);
+        }
+        return !(target instanceof IndexedElement) || !alreadyAssigned((IndexedElement) target, context);
+      }
+    });
   }
 
-  @Override public void completeMessageOptionField_Target(EObject model, Assignment assignment,
-      ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
+  private boolean isOptionExtendee(EObject target) {
+    QualifiedName qualifiedName = target instanceof Message ? qualifiedNames.getFullyQualifiedName(target) : null;
+    if (qualifiedName == null || qualifiedName.getSegmentCount() < 2) {
+      return false;
+    }
+    String name = qualifiedName.getLastSegment();
+    String namespace = qualifiedName.skipLast(1).toString();
+    if (!"google.protobuf".equals(namespace) && !"proto2".equals(namespace)) {
+      return false;
+    }
+    boolean optionsMessage = "FileOptions".equals(name) || "MessageOptions".equals(name)
+        || "FieldOptions".equals(name) || "EnumOptions".equals(name) || "EnumValueOptions".equals(name)
+        || "ServiceOptions".equals(name) || "MethodOptions".equals(name) || "OneofOptions".equals(name)
+        || "ExtensionRangeOptions".equals(name);
+    if (optionsMessage) {
+      for (EObject element : ((Message) target).getElements()) {
+        if (element instanceof Extensions && !((Extensions) element).getRanges().isEmpty()) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
-  @Override public void completeExtensionOptionField_Target(EObject model, Assignment assignment,
-      ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
+  private boolean alreadyAssigned(IndexedElement target, ContentAssistContext context) {
+    if (optionValues.isRepeated(target)) {
+      return false;
+    }
+    ValueField valueField = enclosing(context, ValueField.class);
+    ComplexValue aggregate = valueField == null ? enclosing(context, ComplexValue.class)
+        : EcoreUtil2.getContainerOfType(valueField.eContainer(), ComplexValue.class);
+    if (aggregate != null) {
+      for (EObject sibling : aggregate.eContents()) {
+        if (sibling instanceof ValueField && sibling != valueField
+            && optionValues.declarationOf(sibling) == target) {
+          return true;
+        }
+      }
+      return false;
+    }
+    AbstractOption current = enclosing(context, AbstractOption.class);
+    EObject owner = current == null ? nativeOptionOwner(context) : current.eContainer();
+    if (owner == null) {
+      return false;
+    }
+    for (EObject sibling : owner.eContents()) {
+      if (!(sibling instanceof AbstractOption) || sibling == current) {
+        continue;
+      }
+      AbstractOption option = (AbstractOption) sibling;
+      if (options.sourceOf(option) == target
+          && (current == null || options.fieldsOf(current).isEmpty() && options.fieldsOf(option).isEmpty()
+              || current != null && options.rootSourceOf(current) == options.rootSourceOf(option)
+                  && sameParentPath(current, option))) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  @Override public void complete_MessageOptionField(EObject model, RuleCall ruleCall,
-      ContentAssistContext context, ICompletionProposalAcceptor acceptor) {}
+  private boolean sameParentPath(AbstractOption first, AbstractOption second) {
+    if (options.fieldsOf(first).size() != options.fieldsOf(second).size()) {
+      return false;
+    }
+    for (int i = 0; i + 1 < options.fieldsOf(first).size(); i++) {
+      if (options.fieldsOf(first).get(i).getTarget() != options.fieldsOf(second).get(i).getTarget()) {
+        return false;
+      }
+    }
+    return true;
+  }
 
-  @Override public void complete_ExtensionOptionField(EObject model, RuleCall ruleCall,
-      ContentAssistContext context, ICompletionProposalAcceptor acceptor) {}
+  private EObject optionPathParentType(ContentAssistContext context) {
+    AbstractOption option = enclosing(context, AbstractOption.class);
+    IndexedElement parent = options.rootSourceOf(option);
+    int replacementStart = context.getOffset() - context.getPrefix().length();
+    for (OptionField field : options.fieldsOf(option)) {
+      INode node = NodeModelUtils.getNode(field);
+      if (node == null || node.getEndOffset() >= replacementStart) {
+        break;
+      }
+      parent = field.getTarget();
+    }
+    return optionValues.typeOf(parent);
+  }
+
+  private EObject nativeOptionOwner(ContentAssistContext context) {
+    AbstractOption option = enclosing(context, AbstractOption.class);
+    if (option != null) {
+      return option.eContainer();
+    }
+    for (EObject current = semanticContext(context); current != null; current = current.eContainer()) {
+      if ("option".equals(proposalStatement) && current instanceof MessageField
+          && ((MessageField) current).getName() == null) {
+        continue;
+      }
+      if (current instanceof MessageField || current instanceof Group || current instanceof Literal
+          || current instanceof Extensions || current instanceof OneOf || current instanceof Message
+          || current instanceof Enum || current instanceof Rpc || current instanceof Stream
+          || current instanceof Service || current instanceof Protobuf) {
+        return current;
+      }
+    }
+    return null;
+  }
+
+  private Message nativeOptionsMessage(ContentAssistContext context) {
+    EObject owner = nativeOptionOwner(context);
+    String name = context == proposalContext && proposalRangeOptions ? "ExtensionRangeOptions"
+        : owner instanceof Extensions ? "ExtensionRangeOptions"
+        : owner instanceof Literal ? "EnumValueOptions"
+        : owner instanceof Group && enclosing(context, Option.class) != null ? "MessageOptions"
+        : owner instanceof MessageField || owner instanceof Group ? "FieldOptions"
+        : owner instanceof OneOf ? "OneofOptions" : owner instanceof Message ? "MessageOptions"
+        : owner instanceof Enum ? "EnumOptions" : owner instanceof Rpc ? "MethodOptions"
+        : owner instanceof Stream ? "StreamOptions" : owner instanceof Service ? "ServiceOptions"
+        : owner instanceof Protobuf ? "FileOptions" : null;
+    if (name == null) {
+      return null;
+    }
+    Resource resource = context.getResource();
+    ProtoDescriptorProvider.ProtoDescriptorInfo descriptor = descriptorProvider.primaryDescriptor(resource);
+    Resource selected;
+    try {
+      selected = resource.getResourceSet().getResource(descriptor.location, true);
+    } catch (RuntimeException exception) {
+      // An unavailable authoritative descriptor must not fall back to unrelated indexed fields.
+      return null;
+    }
+    if (!selected.getContents().isEmpty()) {
+      for (EObject declaration : selected.getContents().get(0).eContents()) {
+        if (declaration instanceof Message && name.equals(((Message) declaration).getName())) {
+          return (Message) declaration;
+        }
+      }
+    }
+    return null;
+  }
+
+  private void proposeNativeOptions(ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
+    proposeMembers(nativeOptionsMessage(context), true, context, acceptor);
+  }
+
+  private void proposeMembers(EObject type, boolean nativeRoot, ContentAssistContext context,
+      ICompletionProposalAcceptor acceptor) {
+    if (type instanceof Message) {
+      for (MessageField field : messageFields.fieldsOf((Message) type)) {
+        proposeMember(field, nativeRoot, context, acceptor);
+      }
+      for (EObject element : type.eContents()) {
+        if (element instanceof Group) {
+          proposeMember((Group) element, nativeRoot, context, acceptor);
+        }
+      }
+    } else if (type instanceof Group) {
+      for (EObject element : type.eContents()) {
+        if (element instanceof IndexedElement) {
+          proposeMember((IndexedElement) element, nativeRoot, context, acceptor);
+        }
+      }
+    } else if (type instanceof MapType) {
+      for (MessageField field : ((MapType) type).getEntryFields()) {
+        proposeMember(field, nativeRoot, context, acceptor);
+      }
+    }
+  }
+
+  private void proposeMember(IndexedElement field, boolean nativeRoot, ContentAssistContext context,
+      ICompletionProposalAcceptor acceptor) {
+    String name = options.nameForOption(field);
+    if (name == null || alreadyAssigned(field, context) || nativeRoot
+        && ("features".equals(name) || "map_entry".equals(name)
+            || "packed".equals(name) && !messageFields.isPackable(enclosing(context, MessageField.class)))) {
+      return;
+    }
+    proposeAndAccept(name, context, acceptor);
+  }
+
+  @Override public void completeNativeOptionSource_Target(EObject model, Assignment assignment,
+      ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
+    proposeNativeOptions(context, acceptor);
+  }
 
   @Override public void completeCustomOption_Value(EObject model, Assignment assignment, ContentAssistContext context,
       ICompletionProposalAcceptor acceptor) {
-    if (model instanceof CustomOption) {
-      CustomOption option = (CustomOption) model;
-      IndexedElement e = options.sourceOfLastFieldIn(option);
-      if (e == null) {
-        e = options.rootSourceOf(option);
-      }
-      if (e instanceof MessageField) {
-        proposeFieldValue((MessageField) e, context, acceptor);
-      }
-    }
+    proposeFieldValue(expectedType(context), context, acceptor);
   }
 
   @Override public void completeCustomFieldOption_Value(EObject model, Assignment assignment,
       ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
-    // TODO content assist returns "{"
-    if (model instanceof CustomFieldOption) {
-      // TODO check if this is the same as sourceOf
-      CustomFieldOption option = (CustomFieldOption) model;
-      IndexedElement e = options.sourceOfLastFieldIn(option);
-      if (e == null) {
-        e = options.rootSourceOf(option);
-      }
-      if (e instanceof MessageField) {
-        proposeFieldValue((MessageField) e, context, acceptor);
-      }
-    }
+    proposeFieldValue(expectedType(context), context, acceptor);
   }
 
-  private void proposeFieldValue(MessageField field, ContentAssistContext context,
+  @Override public void completeNativeOption_Value(EObject model, Assignment assignment, ContentAssistContext context,
       ICompletionProposalAcceptor acceptor) {
-    if (field == null || proposePrimitiveValues(field, context, acceptor)) {
-      return;
-    }
-    Enum enumType = messageFields.enumTypeOf(field);
-    if (enumType != null) {
-      proposeAndAccept(enumType, context, acceptor);
-    }
+    proposeFieldValue(expectedType(context), context, acceptor);
   }
 
-  private void proposeAndAccept(Enum enumType, ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
-    Image image = imageHelper.getImage(images.imageFor(LITERAL));
-    for (Literal literal : getAllContentsOfType(enumType, Literal.class)) {
-      proposeAndAccept(literal.getName(), image, context, acceptor);
-    }
-  }
-
-  @Override public void completeNormalFieldName_Target(EObject model, Assignment assignment,
+  @Override public void completeNativeFieldOption_Value(EObject model, Assignment assignment,
       ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
+    proposeFieldValue(expectedType(context), context, acceptor);
   }
 
-  @Override public void completeExtensionFieldName_Target(EObject model, Assignment assignment,
+  @Override public void completeJsonNameFieldOption_Value(EObject model, Assignment assignment,
       ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
+    proposeEmptyString(context, acceptor);
   }
 
-  @Override
-  public void complete_SimpleValueLink(EObject model, RuleCall ruleCall, ContentAssistContext context,
+  @Override public void complete_Value(EObject model, RuleCall ruleCall, ContentAssistContext context,
       ICompletionProposalAcceptor acceptor) {
-    SimpleValueField field = extractElementFromContext(context, SimpleValueField.class);
-    if (field != null) {
-      FieldName name = field.getName();
-      if (name != null) {
-        IndexedElement target = name.getTarget();
-        if (target instanceof MessageField) {
-          proposeFieldValue((MessageField) target, context, acceptor);
+    complete_SimpleValueLink(model, ruleCall, context, acceptor);
+  }
+
+  @Override public void complete_SimpleValueLink(EObject model, RuleCall ruleCall, ContentAssistContext context,
+      ICompletionProposalAcceptor acceptor) {
+    if (enclosing(context, JsonNameFieldOption.class) != null) {
+      proposeEmptyString(context, acceptor);
+    } else {
+      proposeFieldValue(expectedType(context), context, acceptor);
+    }
+  }
+
+  @Override public void completeComplexValueField_Values(EObject model, Assignment assignment,
+      ContentAssistContext context, ICompletionProposalAcceptor acceptor) {
+    proposeFieldValue(expectedType(context), context, acceptor);
+  }
+
+  private void proposeFieldValue(EObject expectedType, ContentAssistContext context,
+      ICompletionProposalAcceptor acceptor) {
+    if (expectedType instanceof ScalarTypeLink) {
+      ScalarType scalar = ((ScalarTypeLink) expectedType).getTarget();
+      if (scalar == ScalarType.BOOL) {
+        proposeAndAccept("false", context, acceptor);
+        proposeAndAccept("true", context, acceptor);
+      } else if (scalar == ScalarType.STRING || scalar == ScalarType.BYTES) {
+        proposeEmptyString(context, acceptor);
+      } else if (scalar == ScalarType.DOUBLE || scalar == ScalarType.FLOAT) {
+        proposeAndAccept("inf", context, acceptor);
+        proposeAndAccept("nan", context, acceptor);
+      }
+    } else if (expectedType instanceof Enum) {
+      Image image = imageHelper.getImage(images.imageFor(LITERAL));
+      for (EObject element : ((Enum) expectedType).getElements()) {
+        if (element instanceof Literal && ((Literal) element).getName() != null) {
+          proposeAndAccept(((Literal) element).getName(), image, context, acceptor);
         }
       }
+    } else if (expectedType instanceof Message || expectedType instanceof Group || expectedType instanceof MapType) {
+      ICompletionProposal proposal = createCompletionProposal("{}", context);
+      if (proposal instanceof ConfigurableCompletionProposal) {
+        ((ConfigurableCompletionProposal) proposal).setCursorPosition(1);
+      }
+      acceptor.accept(proposal);
     }
   }
 
