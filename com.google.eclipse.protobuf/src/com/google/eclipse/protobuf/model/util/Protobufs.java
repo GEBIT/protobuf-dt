@@ -32,10 +32,10 @@ import com.google.inject.Singleton;
    * Indicates whether the given root is not {@code null} and has a known syntax.
    *
    * @param protobuf the given root.
-   * @return whether the attached root uses supported proto2 or proto3 syntax, including default proto2.
+   * @return whether the attached root uses supported proto2, proto3 or Editions, including default proto2.
    */
   public boolean hasKnownSyntax(Protobuf protobuf) {
-    return syntaxes.isProto2(protobuf) || syntaxes.isProto3(protobuf);
+    return syntaxes.isProto2(protobuf) || syntaxes.isProto3(protobuf) || syntaxes.isEditions(protobuf);
   }
 
   /**

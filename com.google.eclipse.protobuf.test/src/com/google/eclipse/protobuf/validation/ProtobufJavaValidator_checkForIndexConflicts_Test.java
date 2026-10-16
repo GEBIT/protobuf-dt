@@ -306,7 +306,9 @@ public class ProtobufJavaValidator_checkForIndexConflicts_Test {
 
   @Test public void should_allow_proto2_featureset_extensions_but_not_proto3_ordinary_extensions() {
     assertValid("syntax = 'proto2'; " + descriptorImport() + "package pb; "
-        + "message JavaFeatures { optional bool flag = 1; } "
+        + "message JavaFeatures { optional bool flag = 1 [targets=TARGET_TYPE_FILE, "
+        + "feature_support={edition_introduced:EDITION_2023}, "
+        + "edition_defaults={edition:EDITION_LEGACY value:'false'}]; } "
         + "extend google.protobuf.FeatureSet { optional JavaFeatures java = 1001; }");
     assertInvalid("syntax = 'proto3'; " + descriptorImport() + "package pb; "
         + "message JavaFeatures { bool flag = 1; } "

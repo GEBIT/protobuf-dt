@@ -333,6 +333,47 @@ public class SmartSemicolonHandlerTest {
     assertNoErrorsAfterEdit();
   }
 
+  @Test public void should_complete_editions_fields_and_first_open_enum_values() throws Exception {
+    for (String year : new String[] {"2023", "2024"}) {
+      xtext.parseText("// ignore errors\nedition='" + year + "'; message M { reserved 1 to 4; int32 value } enum E { ZERO }");
+      MessageField field = xtext.find("value", MessageField.class);
+      Literal literal = xtext.find("ZERO", Literal.class);
+      org.eclipse.text.edits.MultiTextEdit edits = new org.eclipse.text.edits.MultiTextEdit();
+      edits.addChild(handler.completeWithIndex(NodeModelUtils.getNode(field), handler.determineNewIndex(field)));
+      edits.addChild(handler.completeWithIndex(NodeModelUtils.getNode(literal), handler.determineNewIndex(literal)));
+      org.eclipse.jface.text.Document document = new org.eclipse.jface.text.Document(xtext.text());
+      edits.apply(document);
+      xtext.parseText(document.get());
+      assertThat(xtext.find("value", MessageField.class).getIndex(), is(5L));
+      assertThat(xtext.find("ZERO", Literal.class).getIndex(), is(0L));
+      assertNoErrorsAfterEdit();
+    }
+  }
+
+  @Test public void should_respect_reservations_when_completing_closed_editions_enums() throws Exception {
+    for (String year : new String[] {"2023", "2024"}) {
+      xtext.parseText("// ignore errors\nedition='" + year + "'; option features.enum_type=CLOSED; enum E { reserved 0 to 4; FIRST }");
+      Literal literal = xtext.find("FIRST", Literal.class);
+      org.eclipse.jface.text.Document document = new org.eclipse.jface.text.Document(xtext.text());
+      handler.completeWithIndex(NodeModelUtils.getNode(literal), handler.determineNewIndex(literal)).apply(document);
+      xtext.parseText(document.get());
+      assertThat(xtext.find("FIRST", Literal.class).getIndex(), is(5L));
+      assertNoErrorsAfterEdit();
+    }
+  }
+
+  @Test public void should_complete_editions_keyword_identifiers_as_field_names() throws Exception {
+    for (String name : new String[] {"edition", "export", "local"}) {
+      xtext.parseText("// ignore errors\nedition='2024'; message M { int32 " + name + " }");
+      MessageField field = xtext.findFirst(MessageField.class);
+      org.eclipse.jface.text.Document document = new org.eclipse.jface.text.Document(xtext.text());
+      handler.completeWithIndex(NodeModelUtils.getNode(field), handler.determineNewIndex(field)).apply(document);
+      xtext.parseText(document.get());
+      assertThat(xtext.findFirst(MessageField.class).getIndex(), is(1L));
+      assertNoErrorsAfterEdit();
+    }
+  }
+
   private void assertNoErrorsAfterEdit() {
     org.eclipse.xtext.validation.IResourceValidator validator =
         xtext.injector().getInstance(org.eclipse.xtext.validation.IResourceValidator.class);

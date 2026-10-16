@@ -34,7 +34,12 @@ public class ProtobufUriEditorOpener extends LanguageSpecificURIEditorOpener {
 
   /** {@inheritDoc} */
   @Override public IEditorPart open(URI uri, EReference crossReference, int indexInList, boolean select) {
-    IProject originatingProject = originatingProject();
+    return open(uri, crossReference, indexInList, select, originatingProject());
+  }
+
+  /** Opens a captured hyperlink in its invoking document's descriptor/import context. */
+  public IEditorPart open(URI uri, EReference crossReference, int indexInList, boolean select,
+      IProject originatingProject) {
     try {
       IEditorPart editor = editorFor(uri.trimFragment(), originatingProject);
       if (editor != null) {

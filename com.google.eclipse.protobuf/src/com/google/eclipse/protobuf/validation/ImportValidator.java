@@ -19,10 +19,14 @@ import static org.eclipse.xtext.util.Tuples.pair;
 import com.google.eclipse.protobuf.model.util.Imports;
 import com.google.eclipse.protobuf.model.util.Protobufs;
 import com.google.eclipse.protobuf.model.util.Resources;
+import com.google.eclipse.protobuf.model.util.Syntaxes;
 import com.google.eclipse.protobuf.protobuf.Import;
+import com.google.eclipse.protobuf.protobuf.OptionImport;
 import com.google.eclipse.protobuf.protobuf.Protobuf;
+import com.google.eclipse.protobuf.protobuf.WeakImport;
 import com.google.inject.Inject;
 
+import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.resource.Resource;
 import org.eclipse.xtext.util.Pair;
 import org.eclipse.xtext.validation.AbstractDeclarativeValidator;
@@ -42,8 +46,40 @@ public class ImportValidator extends AbstractDeclarativeValidator {
   @Inject private Imports imports;
   @Inject private Protobufs protobufs;
   @Inject private Resources resources;
+  @Inject private Syntaxes syntaxes;
 
   @Override public void register(EValidatorRegistrar registrar) {}
+
+  @Check public void checkEditionImports(Protobuf root) {
+    boolean optionImportSeen = false;
+    Set<URI> imported = newHashSet();
+    for (Import declaration : protobufs.importsIn(root)) {
+      String path = imports.getPath(declaration);
+      if (path == null || path.isEmpty()) continue;
+      if (declaration instanceof OptionImport) {
+        optionImportSeen = true;
+        if (!syntaxes.isEdition2024(root)) {
+          error(Messages.editionOptionImportYear, declaration, IMPORT__PATH, EditionValidator.EDITION_IMPORT);
+        }
+      } else {
+        if (optionImportSeen) {
+          error(Messages.editionImportOrder, declaration, IMPORT__PATH, EditionValidator.EDITION_IMPORT);
+        }
+        if (declaration instanceof WeakImport && syntaxes.isEdition2024(root)) {
+          error(Messages.editionWeakImport, declaration, IMPORT__PATH, EditionValidator.EDITION_IMPORT);
+        }
+      }
+      URI uri = imports.resolvedUriOf(declaration);
+      if (uri == null) continue;
+      uri = uri.trimFragment();
+      if (root.eResource() != null && root.eResource().getResourceSet() != null) {
+        uri = root.eResource().getResourceSet().getURIConverter().normalize(uri);
+      }
+      if (!imported.add(uri)) {
+        error(Messages.editionDuplicateImport, declaration, IMPORT__PATH, EditionValidator.EDITION_IMPORT);
+      }
+    }
+  }
 
   /**
    * Verifies that {@code Import}s in the given root only refer to files with a supported syntax. If

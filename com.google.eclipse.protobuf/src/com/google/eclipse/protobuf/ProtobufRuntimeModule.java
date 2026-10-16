@@ -13,6 +13,7 @@ import com.google.eclipse.protobuf.linking.ProtobufResource;
 import com.google.eclipse.protobuf.linking.ProtobufDerivedStateComputer;
 import com.google.eclipse.protobuf.naming.ProtobufQualifiedNameConverter;
 import com.google.eclipse.protobuf.naming.ProtobufQualifiedNameProvider;
+import com.google.eclipse.protobuf.parser.RecoveringProtobufParser;
 import com.google.eclipse.protobuf.resource.FastXtextResourceSet;
 import com.google.eclipse.protobuf.resource.GlobalResourceServiceProvider;
 import com.google.eclipse.protobuf.scoping.ExtensionRegistryProvider;
@@ -26,6 +27,7 @@ import org.eclipse.core.runtime.IExtensionRegistry;
 import org.eclipse.xtext.conversion.IValueConverterService;
 import org.eclipse.xtext.naming.IQualifiedNameConverter;
 import org.eclipse.xtext.naming.IQualifiedNameProvider;
+import org.eclipse.xtext.parser.IParser;
 import org.eclipse.xtext.parser.antlr.ISyntaxErrorMessageProvider;
 import org.eclipse.xtext.resource.IGlobalServiceProvider;
 import org.eclipse.xtext.resource.ILocationInFileProvider;
@@ -42,6 +44,10 @@ import org.eclipse.xtext.validation.IResourceValidator;
  * registry.
  */
 public class ProtobufRuntimeModule extends AbstractProtobufRuntimeModule {
+  @Override public Class<? extends IParser> bindIParser() {
+    return RecoveringProtobufParser.class;
+  }
+
   public Class<? extends IDerivedStateComputer> bindIDerivedStateComputer() {
     return ProtobufDerivedStateComputer.class;
   }

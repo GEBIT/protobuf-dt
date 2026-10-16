@@ -44,6 +44,8 @@ import org.junit.rules.TemporaryFolder;
 
 import com.google.eclipse.protobuf.junit.core.XtextRule;
 import com.google.eclipse.protobuf.model.util.Options;
+import com.google.eclipse.protobuf.model.util.FeatureSets;
+import com.google.eclipse.protobuf.model.util.MessageFields;
 import com.google.eclipse.protobuf.naming.IProtobufQualifiedNameProvider;
 import com.google.eclipse.protobuf.protobuf.BuiltinLiteral;
 import com.google.eclipse.protobuf.protobuf.Import;
@@ -75,6 +77,8 @@ public class ModernSchemaCorpus_Test {
   @Inject private IProtobufQualifiedNameProvider names;
   @Inject private Options options;
   @Inject private com.google.eclipse.protobuf.model.util.Imports imports;
+  @Inject private FeatureSets features;
+  @Inject private MessageFields fields;
   private IProject project;
   private IPreferenceStore store;
 
@@ -221,6 +225,137 @@ public class ModernSchemaCorpus_Test {
     resource.load(Collections.emptyMap());
     assertClean(resource);
     assertEquals(original, semanticSnapshot(resource));
+  }
+
+  @Test public void should_round_trip_edition_2023_dotted_curly_and_angle_features() throws Exception {
+    roundTripEdition("2023");
+  }
+
+  @Test public void should_round_trip_edition_2024_option_imports_and_visibility() throws Exception {
+    roundTripEdition("2024");
+  }
+
+  private void roundTripEdition(String year) throws Exception {
+    URI root = extract();
+    store.setValue("paths.directoryPaths", root.toFileString());
+    URI selected = root.appendSegments(CANONICAL.split("/"));
+    store.setValue(DESCRIPTOR_PROTO_PATH, selected.toFileString());
+    URI definitions = root.appendSegment("edition-options.proto");
+    String declarations = "syntax='proto2'; package corpus; import 'google/protobuf/descriptor.proto';"
+        + "message Features { optional bool enabled=1 [retention=RETENTION_SOURCE,"
+        + "targets=TARGET_TYPE_FILE,feature_support={edition_introduced:EDITION_2023},"
+        + "edition_defaults={edition:EDITION_LEGACY,value:'false'}]; }"
+        + "extend google.protobuf.FeatureSet { optional Features settings=9999; }"
+        + "extend google.protobuf.FileOptions { optional string note=50001; }";
+    Files.write(java.nio.file.Paths.get(definitions.toFileString()), declarations.getBytes(StandardCharsets.UTF_8));
+    org.eclipse.emf.ecore.resource.ResourceSet set = sets.get(project);
+    XtextResource declarationResource = (XtextResource) set.getResource(definitions, true);
+    assertClean(declarationResource);
+    org.eclipse.xtext.formatting.INodeModelFormatter formatter =
+        xtext.injector().getInstance(org.eclipse.xtext.formatting.INodeModelFormatter.class);
+    String[] assignments = {
+        "option features.field_presence=IMPLICIT;option features.(corpus.settings).enabled=true;",
+        "option features={field_presence:IMPLICIT [corpus.settings]:{enabled:true}};",
+        "option features=<field_presence:IMPLICIT [corpus.settings]:<enabled:true>>;"
+    };
+    List<String> equivalent = null;
+    for (int form = 0; form < assignments.length; form++) {
+      URI uri = root.appendSegment("edition-" + year + "-" + form + ".proto");
+      String source = "edition=\"20\" \"" + year.substring(2) + "\";import "
+          + ("2024".equals(year) ? "option " : "") + "'edition-options.proto';"
+          + assignments[form] + "option (corpus.note)=\"keep / meaningful spaces \" \"and chunks\";"
+          + ("2024".equals(year) ? "export " : "") + "message Envelope{"
+          + "int32 count=1;int32 pinned=2[features.field_presence=EXPLICIT,default=7];"
+          + "repeated int32 samples=3[features.repeated_field_encoding=EXPANDED];"
+          + "map<string,int32> entries=4;oneof choice{string text=5;}reserved old_count;"
+          + ("2024".equals(year) ? "local " : "") + "message Internal{}"
+          + ("2024".equals(year) ? "export " : "") + "enum State{STATE_UNSPECIFIED=0;STATE_READY=1;}}"
+          + "service Api{rpc Bidi(stream Envelope)returns(stream Envelope);}";
+      Files.write(java.nio.file.Paths.get(uri.toFileString()), source.getBytes(StandardCharsets.UTF_8));
+      XtextResource resource = (XtextResource) set.getResource(uri, true);
+      assertClean(resource);
+      List<String> outcomes = editionOutcomes(resource, declarationResource, selected);
+      if (equivalent == null) equivalent = outcomes;
+      else assertEquals("Dotted/curly/angle effective semantics", equivalent, outcomes);
+      List<String> original = semanticSnapshot(resource);
+      String formatted = format(resource, formatter);
+      assertFalse("No leading blank line", formatted.startsWith("\n") || formatted.startsWith("\r"));
+      assertTrue("Header is separated from imports: " + formatted,
+          formatted.matches("(?s)^edition[^;]*;\\R\\Rimport .*"));
+      assertTrue("Chunks are preserved: " + formatted,
+          formatted.contains("\"keep / meaningful spaces \" \"and chunks\""));
+      if ("2024".equals(year)) {
+        assertTrue(formatted, formatted.contains("import option "));
+        assertTrue(formatted, formatted.contains("export message Envelope"));
+        assertTrue(formatted, formatted.contains("local message Internal"));
+        assertTrue(formatted, formatted.contains("export enum State"));
+      }
+      resource.reparse(formatted);
+      assertClean(resource);
+      assertEquals(original, semanticSnapshot(resource));
+      assertEquals(outcomes, editionOutcomes(resource, declarationResource, selected));
+      assertEquals("Two-pass formatting", formatted, format(resource, formatter));
+      Files.write(java.nio.file.Paths.get(uri.toFileString()), formatted.getBytes(StandardCharsets.UTF_8));
+      resource.unload();
+      resource.load(Collections.emptyMap());
+      assertClean(resource);
+      assertEquals(original, semanticSnapshot(resource));
+      assertEquals(outcomes, editionOutcomes(resource, declarationResource, selected));
+      assertEquals("Reopened formatting", formatted, format(resource, formatter));
+    }
+  }
+
+  private List<String> editionOutcomes(XtextResource resource, XtextResource declarations, URI selected) {
+    org.eclipse.emf.ecore.EObject root = resource.getContents().get(0);
+    assertSame(project, EResources.getProjectOf(resource));
+    assertEquals(selected, descriptors.primaryDescriptor(resource).location);
+    List<String> outcomes = new ArrayList<>();
+    for (MessageField field : EcoreUtil2.getAllContentsOfType(root, MessageField.class)) {
+      if (field.eContainer() instanceof com.google.eclipse.protobuf.protobuf.MapType) continue;
+      outcomes.add(field.getName() + ":" + features.coreValue(field, "field_presence")
+          + ":" + fields.supportsExplicitDefault(field));
+      if ("pinned".equals(field.getName())) {
+        assertEquals("EXPLICIT", features.coreValue(field, "field_presence"));
+        assertTrue(fields.supportsExplicitDefault(field));
+        assertEquals(com.google.eclipse.protobuf.protobuf.ModifierEnum.UNSPECIFIED, field.getModifier());
+      }
+      if ("count".equals(field.getName())) {
+        assertEquals("IMPLICIT", features.coreValue(field, "field_presence"));
+        assertFalse(fields.supportsExplicitDefault(field));
+        assertEquals(com.google.eclipse.protobuf.protobuf.ModifierEnum.UNSPECIFIED, field.getModifier());
+      }
+    }
+    for (com.google.eclipse.protobuf.protobuf.Enum enumeration : EcoreUtil2.getAllContentsOfType(
+        root, com.google.eclipse.protobuf.protobuf.Enum.class)) {
+      assertEquals(Boolean.TRUE, features.isOpenEnum(enumeration));
+      outcomes.add(enumeration.getName() + ":" + features.isOpenEnum(enumeration));
+    }
+    List<FeatureSets.Assignment> assignments = features.assignmentsIn(root);
+    assertEquals(2, assignments.size());
+    boolean extension = false;
+    for (FeatureSets.Assignment assignment : assignments) {
+      assertSame(root, assignment.owner);
+      assertSame(resource, assignment.source.eResource());
+      if (assignment.path.size() == 2) {
+        extension = true;
+        assertSame(declarations, assignment.path.get(0).eResource());
+        assertSame(declarations, assignment.path.get(1).eResource());
+        assertFalse(assignment.path.get(0).eIsProxy());
+        assertFalse(assignment.path.get(1).eIsProxy());
+        for (com.google.eclipse.protobuf.protobuf.IndexedElement target : assignment.path) {
+          assertSame("Reference retains the actual selected declaration", target,
+              EcoreUtil2.getAllContentsOfType(declarations.getContents().get(0), MessageField.class).stream()
+                  .filter(candidate -> candidate.getName().equals(((MessageField) target).getName())).findFirst().get());
+        }
+        assertEquals("true", features.explicitValue(root, assignment.path));
+        outcomes.add("extension:true");
+      } else {
+        assertEquals(selected, assignment.path.get(0).eResource().getURI());
+        assertEquals("IMPLICIT", features.explicitValue(root, assignment.path));
+      }
+    }
+    assertTrue("Feature extension resolves in the originating resource set", extension);
+    return outcomes;
   }
 
   private void validateCorpus(URI root, URI selected) throws Exception {

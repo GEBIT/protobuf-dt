@@ -118,6 +118,12 @@ public class ProtobufImportScope extends ImportScope {
     return super.getSingleElement(removeLeadingDot(name));
   }
 
+  /** FilteringScope performs single-name lookups through this enumerable lookup. */
+  @Override
+  public Iterable<IEObjectDescription> getElements(QualifiedName name) {
+    return super.getElements(removeLeadingDot(name));
+  }
+
   public void addNormalizer(ImportNormalizer normalizer) {
     normalizers.add(normalizer);
   }

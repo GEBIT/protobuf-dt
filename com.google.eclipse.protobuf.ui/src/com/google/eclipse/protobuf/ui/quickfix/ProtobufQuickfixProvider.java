@@ -16,6 +16,9 @@ import static com.google.eclipse.protobuf.ui.quickfix.Messages.removeDuplicatePa
 import static com.google.eclipse.protobuf.util.Strings.quote;
 import static com.google.eclipse.protobuf.validation.DataTypeValidator.EXPECTED_BOOL_ERROR;
 import static com.google.eclipse.protobuf.validation.DataTypeValidator.EXPECTED_STRING_ERROR;
+import static com.google.eclipse.protobuf.validation.EditionValidator.EDITION_DEFAULT;
+import static com.google.eclipse.protobuf.validation.EditionValidator.EDITION_FIELD_MODIFIER;
+import static com.google.eclipse.protobuf.validation.EditionValidator.UNSUPPORTED_EDITION;
 import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.INVALID_FIELD_TAG_NUMBER_ERROR;
 import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.MISSING_MODIFIER_ERROR;
 import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.MORE_THAN_ONE_PACKAGE_ERROR;
@@ -31,10 +34,12 @@ import static org.eclipse.xtext.nodemodel.util.NodeModelUtils.findActualNodeFor;
 import com.google.eclipse.protobuf.grammar.CommonKeyword;
 import com.google.eclipse.protobuf.model.util.INodes;
 import com.google.eclipse.protobuf.model.util.IndexedElements;
+import com.google.eclipse.protobuf.model.util.MessageFields;
 import com.google.eclipse.protobuf.model.util.Syntaxes;
 import com.google.eclipse.protobuf.model.util.OptionValues;
 import com.google.eclipse.protobuf.protobuf.AbstractOption;
 import com.google.eclipse.protobuf.protobuf.DefaultValueFieldOption;
+import com.google.eclipse.protobuf.protobuf.Edition;
 import com.google.eclipse.protobuf.naming.NameResolver;
 import com.google.eclipse.protobuf.protobuf.Literal;
 import com.google.eclipse.protobuf.protobuf.LiteralLink;
@@ -74,6 +79,7 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
   @Inject private INodes nodes;
   @Inject private Syntaxes syntaxes;
   @Inject private OptionValues optionValues;
+  @Inject private MessageFields messageFields;
 
   @Fix(SYNTAX_IS_NOT_KNOWN_ERROR)
   public void changeSyntaxToProto2(Issue issue, IssueResolutionAcceptor acceptor) {
@@ -98,6 +104,32 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
     };
     String description = String.format(changeValueDescription, "syntax", quote(Syntaxes.PROTO3));
     String label = String.format(changeValueLabel, Syntaxes.PROTO3);
+    acceptor.accept(issue, label, description, ICON_FOR_CHANGE, modification);
+  }
+
+  @Fix(UNSUPPORTED_EDITION)
+  public void changeEditionTo2023(Issue issue, IssueResolutionAcceptor acceptor) {
+    ISemanticModification modification = new ISemanticModification() {
+      @Override public void apply(EObject element, IModificationContext context) throws Exception {
+        Edition edition = (Edition) element;
+        syntaxes.setName(edition, Syntaxes.EDITION_2023);
+      }
+    };
+    String description = String.format(changeValueDescription, "edition", quote(Syntaxes.EDITION_2023));
+    String label = String.format(changeValueLabel, Syntaxes.EDITION_2023);
+    acceptor.accept(issue, label, description, ICON_FOR_CHANGE, modification);
+  }
+
+  @Fix(UNSUPPORTED_EDITION)
+  public void changeEditionTo2024(Issue issue, IssueResolutionAcceptor acceptor) {
+    ISemanticModification modification = new ISemanticModification() {
+      @Override public void apply(EObject element, IModificationContext context) throws Exception {
+        Edition edition = (Edition) element;
+        syntaxes.setName(edition, Syntaxes.EDITION_2024);
+      }
+    };
+    String description = String.format(changeValueDescription, "edition", quote(Syntaxes.EDITION_2024));
+    String label = String.format(changeValueLabel, Syntaxes.EDITION_2024);
     acceptor.accept(issue, label, description, ICON_FOR_CHANGE, modification);
   }
 
@@ -140,7 +172,7 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
   @Fix(MISSING_MODIFIER_ERROR)
   public void changeModifierToRequired(Issue issue, IssueResolutionAcceptor acceptor) {
     MessageField field = element(issue, MessageField.class);
-    if (field == null || syntaxes.isProto3(field)) {
+    if (field == null || !syntaxes.isProto2(field)) {
       return;
     }
     ISemanticModification modification = new ISemanticModification() {
@@ -157,6 +189,10 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
 
   @Fix(MISSING_MODIFIER_ERROR)
   public void changeModifierToRepeated(Issue issue, IssueResolutionAcceptor acceptor) {
+    MessageField field = element(issue, MessageField.class);
+    if (field == null || !syntaxes.isProto2(field)) {
+      return;
+    }
     ISemanticModification modification = new ISemanticModification() {
       @Override
       public void apply(EObject element, IModificationContext context) throws Exception {
@@ -171,6 +207,10 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
 
   @Fix(MISSING_MODIFIER_ERROR)
   public void changeModifierToOptional(Issue issue, IssueResolutionAcceptor acceptor) {
+    MessageField field = element(issue, MessageField.class);
+    if (field == null || !syntaxes.isProto2(field)) {
+      return;
+    }
     ISemanticModification modification = new ISemanticModification() {
       @Override
       public void apply(EObject element, IModificationContext context) throws Exception {
@@ -207,6 +247,11 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
     removeModifier(issue, acceptor);
   }
 
+  @Fix(EDITION_FIELD_MODIFIER)
+  public void removeEditionModifier(Issue issue, IssueResolutionAcceptor acceptor) {
+    removeModifier(issue, acceptor);
+  }
+
   private void removeModifier(Issue issue, IssueResolutionAcceptor acceptor) {
     MessageField field = element(issue, MessageField.class);
     final INode node = field == null ? null : nodes.firstNodeForFeature(field, MESSAGE_FIELD__MODIFIER);
@@ -228,6 +273,15 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
 
   @Fix(PROTO3_DEFAULT_ERROR)
   public void removeProto3Default(Issue issue, IssueResolutionAcceptor acceptor) {
+    removeDefault(issue, acceptor, "Remove the entire forbidden proto3 default option.");
+  }
+
+  @Fix(EDITION_DEFAULT)
+  public void removeEditionDefault(Issue issue, IssueResolutionAcceptor acceptor) {
+    removeDefault(issue, acceptor, "Remove the entire forbidden Editions default option.");
+  }
+
+  private void removeDefault(Issue issue, IssueResolutionAcceptor acceptor, String description) {
     DefaultValueFieldOption option = element(issue, DefaultValueFieldOption.class);
     if (option == null || !(option.eContainer() instanceof MessageField)) {
       return;
@@ -258,7 +312,7 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
     }
     final int offset = start;
     final int length = end - start;
-    acceptor.accept(issue, "Remove explicit default", "Remove the entire forbidden proto3 default option.",
+    acceptor.accept(issue, "Remove explicit default", description,
         "remove.gif", new IModification() {
           @Override public void apply(IModificationContext context) throws Exception {
             context.getXtextDocument().replace(offset, length, "");
@@ -319,8 +373,14 @@ public class ProtobufQuickfixProvider extends DefaultQuickfixProvider {
   }
 
   private boolean canReplaceValue(EObject element) {
-    return element instanceof AbstractOption
-        && !(element instanceof DefaultValueFieldOption && syntaxes.isProto3(element));
+    if (!(element instanceof AbstractOption)) {
+      return false;
+    }
+    if (element instanceof DefaultValueFieldOption) {
+      EObject owner = element.eContainer();
+      return owner instanceof MessageField && messageFields.supportsExplicitDefault((MessageField) owner);
+    }
+    return true;
   }
 
   private void changeValue(final AbstractOption option, final Value newValue, Object proposedValue, Issue issue,

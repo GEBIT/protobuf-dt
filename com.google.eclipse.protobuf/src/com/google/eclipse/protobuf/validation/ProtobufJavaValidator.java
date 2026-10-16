@@ -54,6 +54,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.google.eclipse.protobuf.model.util.FeatureSets;
 import com.google.eclipse.protobuf.model.util.IndexRanges;
 import com.google.eclipse.protobuf.model.util.IndexRanges.BackwardsRangeException;
 import com.google.eclipse.protobuf.model.util.IndexedElements;
@@ -95,6 +96,7 @@ import com.google.eclipse.protobuf.protobuf.ProtobufPackage;
 import com.google.eclipse.protobuf.protobuf.Reservation;
 import com.google.eclipse.protobuf.protobuf.Reserved;
 import com.google.eclipse.protobuf.protobuf.ReservedEnum;
+import com.google.eclipse.protobuf.protobuf.ReservedName;
 import com.google.eclipse.protobuf.protobuf.ScalarType;
 import com.google.eclipse.protobuf.protobuf.ScalarTypeLink;
 import com.google.eclipse.protobuf.protobuf.StringLiteral;
@@ -117,7 +119,7 @@ import org.eclipse.xtext.validation.ComposedChecks;
 /**
  * @author alruiz@google.com (Alex Ruiz)
  */
-@ComposedChecks(validators = { DataTypeValidator.class, ImportValidator.class })
+@ComposedChecks(validators = { DataTypeValidator.class, ImportValidator.class, EditionValidator.class })
 public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
   public static final String SYNTAX_IS_NOT_KNOWN_ERROR = "syntaxIsNotProto2";
   public static final String INVALID_FIELD_TAG_NUMBER_ERROR = "invalidFieldTagNumber";
@@ -137,12 +139,14 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
   @Inject private Literals literals;
   @Inject private Protobufs protobufs;
   @Inject private Syntaxes syntaxes;
+  @Inject private FeatureSets features;
   @Inject private Imports imports;
   @Inject private Options options;
   @Inject private IQualifiedNameProvider qualifiedNames;
 
   @Check public void checkIsKnownSyntax(Protobuf protobuf) {
-    if (!protobufs.hasKnownSyntax(protobuf) && protobuf.getSyntax() == null) {
+    if (!protobufs.hasKnownSyntax(protobuf) && protobuf.getSyntax() == null && protobuf.getEdition() == null
+        && protobuf.getMisplacedHeaders().isEmpty()) {
       warning(unknownSyntax, null);
     }
   }
@@ -330,15 +334,7 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
   private void checkOwnedReservedNameConflicts(EObject message) {
     Set<String> reservedNames = new HashSet<>();
     for (Reserved reserved : getOwnedElements(message, Reserved.class)) {
-      for (StringLiteral stringLiteral :
-          Iterables.filter(reserved.getReservations(), StringLiteral.class)) {
-        String name = stringLiterals.getCombinedString(stringLiteral);
-        if (name == null) {
-          continue;
-        }
-        reportReservedNameConflicts(name, reservedNames, stringLiteral, null);
-        reservedNames.add(name);
-      }
+      collectReservedNames(reserved.getReservations(), reservedNames);
     }
 
     for (IndexedElement element : getOwnedElements(message, IndexedElement.class)) {
@@ -356,15 +352,7 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
   @Check public void checkForReservedNameConflicts(com.google.eclipse.protobuf.protobuf.Enum anEnum) {
     Set<String> reservedNames = new HashSet<>();
     for (ReservedEnum reserved : getOwnedElements(anEnum, ReservedEnum.class)) {
-      for (StringLiteral stringLiteral :
-          Iterables.filter(reserved.getReservations(), StringLiteral.class)) {
-        String name = stringLiterals.getCombinedString(stringLiteral);
-        if (name == null) {
-          continue;
-        }
-        reportReservedNameConflicts(name, reservedNames, stringLiteral, null);
-        reservedNames.add(name);
-      }
+      collectReservedNames(reserved.getReservations(), reservedNames);
     }
 
     for (Literal literal : getOwnedElements(anEnum, Literal.class)) {
@@ -376,6 +364,25 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
     }
   }
   
+  private void collectReservedNames(List<Reservation> reservations, Set<String> reservedNames) {
+    for (Reservation reservation : reservations) {
+      String name;
+      EAttribute nameAttribute = null;
+      if (reservation instanceof ReservedName) {
+        name = ((ReservedName) reservation).getName();
+        nameAttribute = ProtobufPackage.Literals.RESERVED_NAME__NAME;
+      } else if (reservation instanceof StringLiteral) {
+        name = stringLiterals.getCombinedString((StringLiteral) reservation);
+      } else {
+        continue;
+      }
+      if (name != null) {
+        reportReservedNameConflicts(name, reservedNames, reservation, nameAttribute);
+        reservedNames.add(name);
+      }
+    }
+  }
+
   @Check public void checkForDuplicateFieldNames(Message message) {
     checkNamespace(message);
   }
@@ -407,7 +414,7 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
     for (Reservation reservation : reservations) {
       if (reservation instanceof IndexRange) {
         hasIndexReservation = true;
-      } else if (reservation instanceof StringLiteral) {
+      } else if (reservation instanceof StringLiteral || reservation instanceof ReservedName) {
         hasNameReservation = true;
       }
     }
@@ -611,7 +618,7 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
     List<Literal> values = getOwnedElements(enumeration, Literal.class);
     if (values.isEmpty()) {
       error(Messages.emptyEnum, enumeration, ProtobufPackage.Literals.COMPLEX_TYPE__NAME);
-    } else if (!hasIncompleteName(values.get(0)) && syntaxes.isProto3(enumeration)
+    } else if (!hasIncompleteName(values.get(0)) && Boolean.TRUE.equals(features.isOpenEnum(enumeration))
         && values.get(0).getIndex() != 0L) {
       error(Messages.proto3EnumZero, values.get(0), literals.indexFeatureOf(values.get(0)));
     }
@@ -642,7 +649,7 @@ public class ProtobufJavaValidator extends AbstractProtobufJavaValidator {
     if (field == null || field.eContainer() instanceof MapType) {
       return;
     }
-    if (syntaxes.isProto3(field) && syntaxes.isProto2(enumeration)) {
+    if (syntaxes.isProto3(field) && Boolean.FALSE.equals(features.isOpenEnum(enumeration))) {
       error(Messages.proto3ClosedEnum, link, ProtobufPackage.Literals.COMPLEX_TYPE_LINK__TARGET);
     }
     if (mapValue) {

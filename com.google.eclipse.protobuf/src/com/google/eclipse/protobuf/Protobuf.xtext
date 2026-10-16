@@ -15,11 +15,21 @@ generate protobuf "http://www.google.com/eclipse/protobuf/Protobuf"
 
 Protobuf:
   {Protobuf}
-  (syntax=Syntax)?
-  (elements+=ProtobufElement | ';')*;
+  ((syntax=Syntax | edition=Edition)
+    (elements+=ProtobufElement | misplacedHeaders+=MisplacedHeader | ';')*
+  | (elements+=ProtobufElement | ';')
+    (elements+=ProtobufElement | misplacedHeaders+=MisplacedHeader | ';')*)?;
 
 Syntax:
   'syntax' '=' name=StringLiteral ';';
+
+Edition:
+  {Edition} 'edition' '=' name=StringLiteral ';';
+
+// Preserve declarations after an invalid header without making that header effective.
+// RecoveringProtobufParser marks these nodes as syntax errors.
+MisplacedHeader:
+  {MisplacedHeader} ('syntax' | isEdition?='edition') '=' name=StringLiteral ';';
 
 ProtobufElement:
   Package | Import | Option | ComplexType | TypeExtension | Service;
@@ -31,7 +41,7 @@ PackageName:
   IdOrReservedWord ('.' IdOrReservedWord)*;
 
 Import:
-  NormalImport | PublicImport | WeakImport;
+  NormalImport | PublicImport | WeakImport | OptionImport;
 
 NormalImport:
   'import' path=StringLiteral ';';
@@ -42,16 +52,19 @@ PublicImport:
 WeakImport:
   'import' 'weak' path=StringLiteral ';';
 
+OptionImport:
+  'import' 'option' path=StringLiteral ';';
+
 ComplexType:
   Enum | ExtensibleType;
 
 Message:
-  ->'message' name=Name '{'
+  (visibility=Visibility)? ->'message' name=Name '{'
   (elements+=MessageElement | ';')*
   '}' (';')?;
 
 MessageElement:
-  =>Option | Extensions | ComplexType | MessageField | TypeExtension | OneOf | Reserved;
+  ->Option | Extensions | ComplexType | TypeExtension | OneOf | Reserved | MessageField;
 
 IndexRange:
   from=IndexNumber ('to' to=IndexRangeMax)?;
@@ -67,14 +80,23 @@ enum ModifierEnum:
 enum Modifier returns ModifierEnum:
   optional | required | repeated;
 
+// Keep unspecified as the default while accepting only source visibility modifiers.
+enum SymbolVisibilityEnum:
+  unspecified | export | local;
+
+enum Visibility returns SymbolVisibilityEnum:
+  export | local;
+
+// Recovery-only omissions in field/group rules are diagnosed by RecoveringProtobufParser.
+
 Group:
-  (modifier=Modifier)? =>'group' name=Name '=' index=IndexNumber
-  ('[' (fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)*) ']')? '{'
+  (modifier=Modifier)? =>'group' name=Name ('=' index=IndexNumber)?
+  (->'[' (fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)*) ']')? '{'
   (elements+=GroupElement | ';')*
   '}' (';')?;
 
 GroupElement:
-  =>Option | MessageField | ComplexType | TypeExtension | Extensions | Reserved;
+  ->Option | ComplexType | TypeExtension | Extensions | Reserved | MessageField;
 
 OneOf:
   (isRepeated?='repeated')? =>'oneof' name=Name '{'
@@ -89,8 +111,8 @@ Extensions:
   ('[' fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)* ']')? ';';
 
 MessageField:
-  (modifier=Modifier)? =>type=TypeLink name=Name '=' index=IndexNumber
-  ('[' (fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)*)? ']')? ';';
+  (=>(modifier=Modifier type=TypeLink name=Name) | =>type=TypeLink name=Name) ('=' index=IndexNumber)?
+  (->'[' (fieldOptions+=FieldOption (',' fieldOptions+=FieldOption)*)? ']')? ';'?;
 
 TypeLink:
   =>ScalarTypeLink | =>MapTypeLink | ComplexTypeLink;
@@ -112,7 +134,7 @@ MapType:
   ->'map' '<' keyType=TypeLink ',' valueType=TypeLink '>';
 
 Enum:
-  ->'enum' name=Name '{'
+  (visibility=Visibility)? ->'enum' name=Name '{'
   (elements+=EnumElement | ';')*
   '}' ';'?;
 
@@ -157,7 +179,10 @@ ReservedEnum:
   'reserved' reservations+=Reservation (',' reservations+=Reservation)* ';';
 
 Reservation:
-  IndexRange | StringLiteral;
+  IndexRange | StringLiteral | ReservedName;
+
+ReservedName:
+  name=Name;
 
 Service:
   ->'service' name=Name '{'
@@ -192,31 +217,31 @@ AbstractCustomOption:
   CustomOption | CustomFieldOption;
 
 Option:
-  NativeOption | CustomOption;
+  'option' (NativeOption | CustomOption);
 
 NativeOption:
-  'option' source=NativeOptionSource
-  ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value ';';
+  source=NativeOptionSource
+  ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value? ';';
 
 CustomOption:
-  'option' =>'(' source=OptionSource ')'
-  ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value ';';
+  '(' source=OptionSource ')'
+  ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value? ';';
 
 FieldOption:
   DefaultValueFieldOption | JsonNameFieldOption | NativeFieldOption | CustomFieldOption;
 
 DefaultValueFieldOption:
-  =>'default' '=' value=Value;
+  =>'default' '=' value=Value?;
 
 JsonNameFieldOption:
-  =>'json_name' '=' value=Value;
+  =>'json_name' '=' value=Value?;
 
 NativeFieldOption:
-  source=NativeOptionSource ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value;
+  source=NativeOptionSource ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value?;
 
 CustomFieldOption:
   ->'(' source=OptionSource ')'
-  ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value;
+  ('.' fields+=OptionField ('.' fields+=OptionField)*)? '=' value=Value?;
 
 OptionSource:
   target=[IndexedElement|QualifiedName];
@@ -234,7 +259,7 @@ ExtensionOptionField:
   target=[IndexedElement|QualifiedName];
 
 IndexedElement:
-  =>MessageField | Group;
+  Group | MessageField;
 
 Value:
   ComplexValue | SimpleValueLink;
@@ -302,7 +327,9 @@ SafeReservedWord:
   'bytes' |
   'default' |
   'double' |
+  'edition' |
   'enum' |
+  'export' |
   'extend' |
   'extensions' |
   'false' |
@@ -314,6 +341,7 @@ SafeReservedWord:
   'int32' |
   'int64' |
   'json_name' |
+  'local' |
   'map' |
   'max' |
   'message' |

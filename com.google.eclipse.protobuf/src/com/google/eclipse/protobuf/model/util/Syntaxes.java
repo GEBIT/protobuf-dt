@@ -11,6 +11,8 @@ package com.google.eclipse.protobuf.model.util;
 import org.eclipse.emf.ecore.EObject;
 
 import com.google.eclipse.protobuf.parser.UnknownSyntaxProtobuf;
+import com.google.eclipse.protobuf.protobuf.Edition;
+import com.google.eclipse.protobuf.protobuf.MisplacedHeader;
 import com.google.eclipse.protobuf.protobuf.Protobuf;
 import com.google.eclipse.protobuf.protobuf.ProtobufFactory;
 import com.google.eclipse.protobuf.protobuf.StringLiteral;
@@ -25,6 +27,8 @@ import com.google.inject.Singleton;
 @Singleton public final class Syntaxes {
   public static final String PROTO2 = "proto2";
   public static final String PROTO3 = "proto3";
+  public static final String EDITION_2023 = "2023";
+  public static final String EDITION_2024 = "2024";
 
   @Inject
   private StringLiterals stringLiterals;
@@ -33,14 +37,48 @@ import com.google.inject.Singleton;
 
   public boolean isProto2(EObject context) {
     Protobuf root = modelObjects.rootOf(context);
-    return root != null && !(root instanceof UnknownSyntaxProtobuf)
+    return root != null && !(root instanceof UnknownSyntaxProtobuf) && root.getEdition() == null
+        && !hasMisplacedEdition(root)
         && (root.getSyntax() == null || isSpecifyingProto2Syntax(root.getSyntax()));
   }
 
   public boolean isProto3(EObject context) {
     Protobuf root = modelObjects.rootOf(context);
-    return root != null && !(root instanceof UnknownSyntaxProtobuf)
+    return root != null && !(root instanceof UnknownSyntaxProtobuf) && root.getEdition() == null
+        && !hasMisplacedEdition(root)
         && isSpecifyingProto3Syntax(root.getSyntax());
+  }
+
+  private boolean hasMisplacedEdition(Protobuf root) {
+    for (MisplacedHeader header : root.getMisplacedHeaders()) {
+      if (header.isIsEdition()) return true;
+    }
+    return false;
+  }
+
+  public boolean isEditions(EObject context) {
+    Protobuf root = modelObjects.rootOf(context);
+    if (root == null || root instanceof UnknownSyntaxProtobuf) {
+      return false;
+    }
+    String name = getName(root.getEdition());
+    return EDITION_2023.equals(name) || EDITION_2024.equals(name);
+  }
+
+  public boolean isEdition2024(EObject context) {
+    Protobuf root = modelObjects.rootOf(context);
+    return root != null && !(root instanceof UnknownSyntaxProtobuf)
+        && EDITION_2024.equals(getName(root.getEdition()));
+  }
+
+  public String getName(Edition edition) {
+    return edition == null || edition.getName() == null ? null : stringLiterals.getCombinedString(edition.getName());
+  }
+
+  public void setName(Edition edition, String name) {
+    StringLiteral literal = ProtobufFactory.eINSTANCE.createStringLiteral();
+    literal.getChunks().add(Strings.quote(name));
+    edition.setName(literal);
   }
 
   /**

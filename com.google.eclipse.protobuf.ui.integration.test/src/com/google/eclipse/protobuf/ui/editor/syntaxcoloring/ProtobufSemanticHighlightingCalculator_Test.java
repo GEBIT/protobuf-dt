@@ -75,6 +75,23 @@ public class ProtobufSemanticHighlightingCalculator_Test {
     }
   }
 
+  @Test public void should_highlight_real_editions_feature_values_and_unlabeled_type_references() {
+    for (String year : new String[] {"2023", "2024"}) {
+      String source = "edition='" + year + "'; option features.enum_type=OPEN; "
+          + "message Payload {} enum Mode { ZERO=0; } message Envelope { "
+          + "Payload child=1 [features.message_encoding=DELIMITED]; "
+          + "repeated int32 values=2 [features={repeated_field_encoding:EXPANDED}]; "
+          + "Mode state=3 [default=ZERO]; }";
+      List<Position> positions = highlight(source);
+      assertSpan(positions, source, "enum_type=OPEN", "OPEN", HighlightingConfiguration.ENUM_LITERAL_ID);
+      assertSpan(positions, source, "message_encoding=DELIMITED", "DELIMITED", HighlightingConfiguration.ENUM_LITERAL_ID);
+      assertSpan(positions, source, "repeated_field_encoding:EXPANDED", "EXPANDED", HighlightingConfiguration.ENUM_LITERAL_ID);
+      assertSpan(positions, source, "Payload child", "Payload", HighlightingConfiguration.MESSAGE_ID);
+      assertSpan(positions, source, "child=1", "1", HighlightingConfiguration.MESSAGE_FIELD_INDEX_ID);
+      assertSpan(positions, source, "default=ZERO", "ZERO", HighlightingConfiguration.ENUM_LITERAL_ID);
+    }
+  }
+
   private List<Position> highlight(String source) {
     xtext.parseText(source);
     java.util.List<org.eclipse.xtext.validation.Issue> issues =

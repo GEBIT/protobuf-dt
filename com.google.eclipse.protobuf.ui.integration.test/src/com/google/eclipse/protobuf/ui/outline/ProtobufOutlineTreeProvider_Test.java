@@ -51,6 +51,27 @@ public class ProtobufOutlineTreeProvider_Test {
     });
   }
 
+  @Test public void should_keep_edition_headers_out_of_the_existing_outline_pipeline() {
+    for (String year : new String[] {"2023", "2024"}) {
+      String source = "edition='" + year + "'; message Payload {} message Container { "
+          + "map<string, Payload> payloads=1; oneof choice { Payload selected=2; } }";
+      xtext.parseText(source);
+      java.util.List<org.eclipse.xtext.validation.Issue> issues =
+          validator.validate(xtext.resource(), CheckMode.ALL, CancelIndicator.NullImpl);
+      assertTrue(issues.toString(), issues.isEmpty());
+      Display.getDefault().syncExec(() -> {
+        XtextDocument document = xtext.injector().getInstance(XtextDocument.class);
+        document.set(source);
+        document.setInput(xtext.resource());
+        IOutlineNode root = outlines.createRoot(document);
+        assertEquals(2, root.getChildren().size());
+        IOutlineNode container = child(root, "Container");
+        assertFalse(child(container, "payloads [1] : map<string, Payload>").hasChildren());
+        assertFalse(child(child(container, "choice"), "selected [2] : Payload").hasChildren());
+      });
+    }
+  }
+
   private IOutlineNode child(IOutlineNode parent, String expected) {
     for (IOutlineNode child : parent.getChildren()) {
       Object label = child.getText();

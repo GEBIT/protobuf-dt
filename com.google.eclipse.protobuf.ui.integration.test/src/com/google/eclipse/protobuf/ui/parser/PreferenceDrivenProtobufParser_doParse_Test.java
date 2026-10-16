@@ -28,6 +28,7 @@ import org.junit.Test;
 
 import com.google.eclipse.protobuf.junit.core.XtextRule;
 import com.google.eclipse.protobuf.junit.util.MultiLineTextBuilder;
+import com.google.eclipse.protobuf.model.util.Syntaxes;
 import com.google.eclipse.protobuf.parser.UnknownSyntaxProtobuf;
 import com.google.eclipse.protobuf.protobuf.ComplexTypeLink;
 import com.google.eclipse.protobuf.protobuf.MessageField;
@@ -54,6 +55,7 @@ public class PreferenceDrivenProtobufParser_doParse_Test {
 
   @Inject private IPreferenceStoreAccess storeAccess;
   @Inject private org.eclipse.xtext.validation.IResourceValidator validator;
+  @Inject private Syntaxes syntaxes;
   private boolean oldInternal;
   private IPreferenceStore store;
 
@@ -107,6 +109,65 @@ public class PreferenceDrivenProtobufParser_doParse_Test {
       assertTrue(issues.toString(), issues.stream().anyMatch(issue ->
           com.google.eclipse.protobuf.validation.ProtobufJavaValidator.SYNTAX_IS_NOT_KNOWN_ERROR
               .equals(issue.getCode())));
+    }
+  }
+
+  @Test public void should_keep_both_editions_fields_and_links_in_both_preference_modes() {
+    for (boolean internal : new boolean[] {false, true}) {
+      store.setValue("misc.googleInternal", internal);
+      for (String year : new String[] {"2023", "2024"}) {
+        xtext.parseText("edition='20' \"" + year.substring(2) + "\"; message Outer { "
+            + "int32 count=1 [default=7]; message Inner {} Inner child=2; }");
+        java.util.List<org.eclipse.xtext.validation.Issue> issues = validator.validate(xtext.resource(),
+            org.eclipse.xtext.validation.CheckMode.ALL, org.eclipse.xtext.util.CancelIndicator.NullImpl);
+        assertTrue(issues.toString(), issues.isEmpty());
+        assertEquals(year, syntaxes.getName(xtext.root().getEdition()));
+        assertTrue(syntaxes.isEditions(xtext.root()));
+        assertEquals(ModifierEnum.UNSPECIFIED, xtext.find("count", MessageField.class).getModifier());
+        MessageField child = xtext.find("child", MessageField.class);
+        assertEquals("Inner", ((ComplexTypeLink) child.getType()).getTarget().getName());
+      }
+    }
+  }
+
+  @Test public void should_keep_unsupported_and_incomplete_editions_in_both_preference_modes() {
+    for (boolean internal : new boolean[] {false, true}) {
+      store.setValue("misc.googleInternal", internal);
+      for (String source : new String[] {"edition='2025'; message M {}", "edition='2026'; message M {}",
+          "edition='proto2'; message M {}", "edition=''; message M {}", "edition",
+          "edition=; message M {}", "edition='unterminated;\nmessage M {}"}) {
+        xtext.parseText("// ignore errors\n" + source);
+        org.junit.Assert.assertFalse(xtext.root() instanceof UnknownSyntaxProtobuf);
+        org.junit.Assert.assertNotNull(xtext.root().getEdition());
+        org.junit.Assert.assertFalse(syntaxes.isProto2(xtext.root()));
+        org.junit.Assert.assertFalse(syntaxes.isProto3(xtext.root()));
+        java.util.List<org.eclipse.xtext.validation.Issue> issues = validator.validate(xtext.resource(),
+            org.eclipse.xtext.validation.CheckMode.ALL, org.eclipse.xtext.util.CancelIndicator.NullImpl);
+        assertTrue(issues.toString(), issues.stream().anyMatch(issue ->
+            issue.getSeverity() == org.eclipse.xtext.diagnostics.Severity.ERROR));
+        org.junit.Assert.assertFalse(issues.toString(), issues.stream().anyMatch(issue ->
+            com.google.eclipse.protobuf.validation.ProtobufJavaValidator.SYNTAX_IS_NOT_KNOWN_ERROR.equals(issue.getCode())));
+      }
+    }
+  }
+
+  @Test public void should_keep_declarations_after_misplaced_headers_in_both_preference_modes() {
+    for (boolean internal : new boolean[] {false, true}) {
+      store.setValue("misc.googleInternal", internal);
+      for (String source : new String[] {
+          "edition='2024'; edition='2023'; message After {}",
+          "edition='2024'; syntax='proto3'; message After {}",
+          "syntax='proto3'; edition='2024'; message After {}",
+          "message Before {} edition='2024'; message After {}"}) {
+        xtext.parseText("// ignore errors\n" + source);
+        org.junit.Assert.assertFalse(xtext.root() instanceof UnknownSyntaxProtobuf);
+        assertEquals("After", xtext.find("After", com.google.eclipse.protobuf.protobuf.Message.class).getName());
+        assertTrue(xtext.resource().getParseResult().hasSyntaxErrors());
+        org.junit.Assert.assertFalse(syntaxes.isProto2(xtext.root()));
+        java.util.List<org.eclipse.xtext.validation.Issue> issues = validator.validate(xtext.resource(),
+            org.eclipse.xtext.validation.CheckMode.ALL, org.eclipse.xtext.util.CancelIndicator.NullImpl);
+        assertTrue(issues.toString(), issues.stream().anyMatch(org.eclipse.xtext.validation.Issue::isSyntaxError));
+      }
     }
   }
 }

@@ -9,6 +9,10 @@ package com.google.eclipse.protobuf.ui.editor.model;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.createWith;
 import static com.google.eclipse.protobuf.preferences.general.PreferenceNames.DESCRIPTOR_PROTO_PATH;
 import static com.google.eclipse.protobuf.preferences.general.PreferenceNames.ENABLE_PROJECT_SETTINGS_PREFERENCE_NAME;
+import static com.google.eclipse.protobuf.validation.EditionValidator.EDITION_DEFAULT;
+import static com.google.eclipse.protobuf.validation.EditionValidator.EDITION_FIELD_MODIFIER;
+import static com.google.eclipse.protobuf.validation.EditionValidator.EDITIONS_FEATURES_UNAVAILABLE;
+import static com.google.eclipse.protobuf.validation.EditionValidator.FEATURE_SUPPORT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
@@ -16,6 +20,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.List;
@@ -33,6 +38,7 @@ import org.eclipse.core.resources.IProjectDescription;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.jdt.core.IClasspathEntry;
@@ -57,10 +63,15 @@ import org.junit.Rule;
 import org.junit.Test;
 
 import com.google.eclipse.protobuf.junit.core.XtextRule;
+import com.google.common.io.ByteStreams;
+import com.google.eclipse.protobuf.model.util.FeatureSets;
+import com.google.eclipse.protobuf.model.util.MessageFields;
 import com.google.eclipse.protobuf.model.util.Imports;
 import com.google.eclipse.protobuf.protobuf.ComplexTypeLink;
 import com.google.eclipse.protobuf.protobuf.Import;
 import com.google.eclipse.protobuf.protobuf.NativeOption;
+import com.google.eclipse.protobuf.protobuf.MessageField;
+import com.google.eclipse.protobuf.validation.Messages;
 import com.google.eclipse.protobuf.ui.plugin.ProtobufEditorPlugIn;
 import com.google.eclipse.protobuf.util.EResources;
 import com.google.inject.Inject;
@@ -73,6 +84,8 @@ public class ProtobufDocumentProvider_livePreferences_Test {
   @Inject private ProtobufDocumentProvider provider;
   @Inject private Imports imports;
   @Inject private IResourceValidator validator;
+  @Inject private FeatureSets features;
+  @Inject private MessageFields fields;
 
   private IProject project;
   private IPreferenceStore workspaceStore;
@@ -83,6 +96,9 @@ public class ProtobufDocumentProvider_livePreferences_Test {
   private FileEditorInput input;
   private XtextDocument document;
   private int connections;
+  private IProject secondProject;
+  private FileEditorInput secondInput;
+  private XtextDocument secondDocument;
 
   @Before public void setUp() throws Exception {
     onUi(() -> {
@@ -106,11 +122,17 @@ public class ProtobufDocumentProvider_livePreferences_Test {
       while (connections > 0) {
         disconnect();
       }
+      if (secondInput != null) {
+        provider.disconnect(secondInput);
+      }
       if (workspaceStore != null) {
         workspaceStore.setValue(DESCRIPTOR_PROTO_PATH, originalWorkspaceDescriptor);
       }
       if (project != null && project.exists()) {
         project.delete(true, true, null);
+      }
+      if (secondProject != null && secondProject.exists()) {
+        secondProject.delete(true, true, null);
       }
       return null;
     });
@@ -287,6 +309,226 @@ public class ProtobufDocumentProvider_livePreferences_Test {
       assertNoErrors();
       return null;
     });
+  }
+
+  @Test public void should_recompute_edition_policy_across_workspace_and_project_selection_without_saving() throws Exception {
+    String bundled = bundledDescriptor();
+    IFile baseline = onUi(() -> write("edition-baseline.proto", bundled));
+    IFile changed = onUi(() -> write("edition-changed.proto", restrictedDescriptor(bundled)));
+    String unsaved = onUi(() -> {
+      workspaceStore.setValue(DESCRIPTOR_PROTO_PATH, fileUri(baseline).toString());
+      projectStore.setValue(DESCRIPTOR_PROTO_PATH, fileUri(changed).toString());
+      open(editionSource());
+      document.set(document.get() + "\nmessage Unsaved {}\n");
+      return document.get();
+    });
+    long stamp = onUi(() -> document.getModificationStamp());
+    await(() -> editionPolicyIs(document, fileUri(baseline), false));
+    onUi(() -> {
+      projectStore.setValue(ENABLE_PROJECT_SETTINGS_PREFERENCE_NAME, true);
+      return null;
+    });
+    await(() -> editionPolicyIs(document, fileUri(changed), true));
+    onUi(() -> {
+      assertUntouched(document, input, unsaved, stamp);
+      projectStore.setValue(ENABLE_PROJECT_SETTINGS_PREFERENCE_NAME, false);
+      workspaceStore.setValue(DESCRIPTOR_PROTO_PATH, fileUri(changed).toString());
+      return null;
+    });
+    await(() -> editionPolicyIs(document, fileUri(changed), true));
+    onUi(() -> {
+      workspaceStore.setValue(DESCRIPTOR_PROTO_PATH, fileUri(baseline).toString());
+      return null;
+    });
+    await(() -> editionPolicyIs(document, fileUri(baseline), false));
+    onUi(() -> {
+      assertUntouched(document, input, unsaved, stamp);
+      return null;
+    });
+  }
+
+  @Test public void should_isolate_two_live_projects_and_reparse_changed_selected_metadata() throws Exception {
+    String bundled = bundledDescriptor();
+    IFile first = onUi(() -> write("edition-first.proto", bundled));
+    IFile second = onUi(() -> {
+      secondProject = ResourcesPlugin.getWorkspace().getRoot().getProject("live-editions-second-" + System.nanoTime());
+      secondProject.create(null);
+      secondProject.open(null);
+      IFile descriptor = secondProject.getFile("edition-second.proto");
+      write(descriptor, restrictedDescriptor(bundled));
+      IPreferenceStore secondStore = stores.getWritablePreferenceStore(secondProject);
+      secondStore.setValue(DESCRIPTOR_PROTO_PATH, fileUri(descriptor).toString());
+      secondStore.setValue(ENABLE_PROJECT_SETTINGS_PREFERENCE_NAME, true);
+      projectStore.setValue(DESCRIPTOR_PROTO_PATH, fileUri(first).toString());
+      projectStore.setValue(ENABLE_PROJECT_SETTINGS_PREFERENCE_NAME, true);
+      open(editionSource());
+      IFile source = secondProject.getFile("main.proto");
+      write(source, editionSource());
+      FileEditorInput connectedInput = new FileEditorInput(source);
+      provider.connect(connectedInput);
+      secondInput = connectedInput;
+      secondDocument = (XtextDocument) provider.getDocument(secondInput);
+      document.set(document.get() + "\nmessage FirstUnsaved {}\n");
+      secondDocument.set(secondDocument.get() + "\nmessage SecondUnsaved {}\n");
+      return descriptor;
+    });
+    String firstText = onUi(() -> document.get());
+    String secondText = onUi(() -> secondDocument.get());
+    long firstStamp = onUi(() -> document.getModificationStamp());
+    long secondStamp = onUi(() -> secondDocument.getModificationStamp());
+    await(() -> editionPolicyIs(document, fileUri(first), false)
+        && editionPolicyIs(secondDocument, fileUri(second), true));
+    onUi(() -> {
+      document.readOnly(resource -> { assertEquals(project, EResources.getProjectOf(resource)); return null; });
+      secondDocument.readOnly(resource -> { assertEquals(secondProject, EResources.getProjectOf(resource)); return null; });
+      write(first, restrictedDescriptor(bundled));
+      return null;
+    });
+    await(() -> editionPolicyIs(document, fileUri(first), true)
+        && editionPolicyIs(secondDocument, fileUri(second), true));
+    onUi(() -> {
+      write(second, bundled);
+      return null;
+    });
+    await(() -> editionPolicyIs(document, fileUri(first), true)
+        && editionPolicyIs(secondDocument, fileUri(second), false));
+    onUi(() -> {
+      assertUntouched(document, input, firstText, firstStamp);
+      assertUntouched(secondDocument, secondInput, secondText, secondStamp);
+      return null;
+    });
+  }
+
+  @Test public void should_report_one_descriptor_error_without_bundled_feature_fallback_and_keep_label_checks() throws Exception {
+    String bundled = bundledDescriptor();
+    IFile complete = onUi(() -> write("edition-complete.proto", bundled));
+    int start = bundled.indexOf("  optional FieldPresence field_presence = 1 [");
+    assertTrue(start >= 0);
+    int end = bundled.indexOf("];", start) + 2;
+    IFile incomplete = onUi(() -> write("edition-incomplete.proto", bundled.substring(0, start) + bundled.substring(end)));
+    IFile missing = project.getFile("edition-does-not-exist.proto");
+    String unsaved = onUi(() -> {
+      workspaceStore.setValue(DESCRIPTOR_PROTO_PATH, fileUri(complete).toString());
+      open(editionSource());
+      document.set(document.get() + "\nmessage Unsaved { optional int32 labeled = 1; }\n");
+      return document.get();
+    });
+    long stamp = onUi(() -> document.getModificationStamp());
+    await(() -> editionPolicyIs(document, fileUri(complete), false));
+    for (IFile selected : new IFile[] { workspaceDescriptor, incomplete, missing }) {
+      onUi(() -> {
+        workspaceStore.setValue(DESCRIPTOR_PROTO_PATH, fileUri(complete).toString());
+        return null;
+      });
+      await(() -> editionPolicyIs(document, fileUri(complete), false));
+      onUi(() -> {
+        workspaceStore.setValue(DESCRIPTOR_PROTO_PATH, fileUri(selected).toString());
+        return null;
+      });
+      await(() -> unavailableEditionPolicy());
+      onUi(() -> {
+        assertUntouched(document, input, unsaved, stamp);
+        return null;
+      });
+    }
+    onUi(() -> {
+      workspaceStore.setValue(DESCRIPTOR_PROTO_PATH, fileUri(complete).toString());
+      return null;
+    });
+    await(() -> editionPolicyIs(document, fileUri(complete), false));
+    onUi(() -> {
+      assertUntouched(document, input, unsaved, stamp);
+      assertEquals(1L, issues(document).stream().filter(issue -> EDITION_FIELD_MODIFIER.equals(issue.getCode())).count());
+      return null;
+    });
+  }
+
+  private boolean editionPolicyIs(XtextDocument live, URI selected, boolean restricted) {
+    return live.readOnly(resource -> {
+      EObject root = resource.getContents().get(0);
+      List<MessageField> members = EcoreUtil2.getAllContentsOfType(root, MessageField.class);
+      MessageField value = members.stream().filter(field -> "value".equals(field.getName())).findFirst().orElse(null);
+      MessageField text = members.stream().filter(field -> "text".equals(field.getName())).findFirst().orElse(null);
+      List<com.google.eclipse.protobuf.protobuf.Enum> enums = EcoreUtil2.getAllContentsOfType(root,
+          com.google.eclipse.protobuf.protobuf.Enum.class);
+      if (value == null || text == null || enums.isEmpty() || !features.hasRequiredMetadata(root)) return false;
+      List<com.google.eclipse.protobuf.protobuf.IndexedElement> path = features.corePath(root, "utf8_validation");
+      if (path.isEmpty() || !selected.equals(path.get(0).eResource().getURI())) return false;
+      List<NativeOption> options = EcoreUtil2.getAllContentsOfType(root, NativeOption.class);
+      NativeOption packageOption = options.stream().filter(option -> option.getSource() != null
+          && option.getSource().getTarget() instanceof MessageField
+          && "java_package".equals(((MessageField) option.getSource().getTarget()).getName())).findFirst().orElse(null);
+      if (packageOption == null || packageOption.getSource().getTarget() == null
+          || packageOption.getSource().getTarget().eIsProxy()
+          || !selected.equals(packageOption.getSource().getTarget().eResource().getURI())) return false;
+      List<Issue> problems = validator.validate(resource, CheckMode.ALL, CancelIndicator.NullImpl);
+      return fields.supportsExplicitDefault(value) == !restricted
+          && Boolean.valueOf(!restricted).equals(features.isOpenEnum(enums.get(0)))
+          && features.canAssign(text, path, null) == !restricted
+          && problems.stream().filter(issue -> EDITION_DEFAULT.equals(issue.getCode())).count() == (restricted ? 1 : 0)
+          && problems.stream().filter(issue -> FEATURE_SUPPORT.equals(issue.getCode())).count() == (restricted ? 1 : 0)
+          && problems.stream().filter(issue -> Messages.proto3EnumZero.equals(issue.getMessage())).count() == (restricted ? 0 : 1)
+          && problems.stream().noneMatch(issue -> EDITIONS_FEATURES_UNAVAILABLE.equals(issue.getCode()));
+    });
+  }
+
+  private boolean unavailableEditionPolicy() {
+    return document.readOnly(resource -> {
+      EObject root = resource.getContents().get(0);
+      MessageField value = EcoreUtil2.getAllContentsOfType(root, MessageField.class).stream()
+          .filter(field -> "value".equals(field.getName())).findFirst().get();
+      com.google.eclipse.protobuf.protobuf.Enum enumeration = EcoreUtil2.getAllContentsOfType(root,
+          com.google.eclipse.protobuf.protobuf.Enum.class).get(0);
+      List<Issue> problems = validator.validate(resource, CheckMode.ALL, CancelIndicator.NullImpl);
+      return !features.hasRequiredMetadata(root) && features.corePath(root, "field_presence").isEmpty()
+          && features.coreValue(value, "field_presence") == null && features.isOpenEnum(enumeration) == null
+          && !fields.supportsExplicitDefault(value)
+          && !features.canAssign(value, features.corePath(root, "field_presence"), null)
+          && problems.stream().filter(issue -> EDITIONS_FEATURES_UNAVAILABLE.equals(issue.getCode())).count() == 1
+          && problems.stream().filter(issue -> EDITION_FIELD_MODIFIER.equals(issue.getCode())).count() == 1
+          && problems.stream().noneMatch(issue -> EDITION_DEFAULT.equals(issue.getCode())
+              || FEATURE_SUPPORT.equals(issue.getCode()) || Messages.proto3EnumZero.equals(issue.getMessage()));
+    });
+  }
+
+  private List<Issue> issues(XtextDocument live) {
+    return live.readOnly(resource -> validator.validate(resource, CheckMode.ALL, CancelIndicator.NullImpl));
+  }
+
+  private void assertUntouched(XtextDocument live, FileEditorInput editorInput, String text, long stamp) {
+    assertEquals(text, live.get());
+    assertEquals(stamp, live.getModificationStamp());
+    assertTrue(provider.canSaveDocument(editorInput));
+    live.readOnly(resource -> {
+      assertEquals(text, resource.getParseResult().getRootNode().getText());
+      return null;
+    });
+  }
+
+  private static String editionSource() {
+    return "edition = '2023'; import 'google/protobuf/descriptor.proto'; option java_package = 'live'; "
+        + "message M { int32 value = 1 [default = 7]; string text = 2 [features.utf8_validation = VERIFY]; } "
+        + "enum E { ONE = 1; }";
+  }
+
+  private static String bundledDescriptor() throws Exception {
+    try (InputStream stream = Platform.getBundle("de.gebit.eclipse.protobuf")
+        .getEntry("google/protobuf/descriptor.proto").openStream()) {
+      return new String(ByteStreams.toByteArray(stream), StandardCharsets.UTF_8);
+    }
+  }
+
+  private static String restrictedDescriptor(String source) {
+    String changed = source.replace("edition: EDITION_2023, value: \"EXPLICIT\"",
+        "edition: EDITION_2023, value: \"IMPLICIT\"")
+        .replace("edition: EDITION_PROTO3, value: \"OPEN\"", "edition: EDITION_PROTO3, value: \"CLOSED\"");
+    int start = changed.indexOf("  optional Utf8Validation utf8_validation = 4 [");
+    assertTrue(start >= 0);
+    int end = changed.indexOf("];", start);
+    String feature = changed.substring(start, end);
+    String restricted = feature.replace("edition_introduced: EDITION_2023", "edition_introduced: EDITION_2024");
+    assertFalse(feature.equals(restricted));
+    return changed.substring(0, start) + restricted + changed.substring(end);
   }
 
   private void open(String source) throws Exception {

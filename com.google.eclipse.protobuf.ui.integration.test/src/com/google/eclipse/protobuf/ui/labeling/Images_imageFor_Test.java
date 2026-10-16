@@ -53,17 +53,19 @@ public class Images_imageFor_Test {
   @Inject private Images images;
 
   @Test public void should_show_existing_field_icons_for_implicit_maps_and_oneof_members() {
-    xtext.parseText("syntax = \"proto3\"; message Child {} message Parent { "
-        + "string text = 1; map<string, Child> children = 2; oneof choice { Child child = 3; } }");
-    for (MessageField field : xtext.findAll(MessageField.class)) {
-      if (field.eContainer() instanceof com.google.eclipse.protobuf.protobuf.MapType) continue;
-      String image = images.imageFor(field);
-      assertThat(image, equalTo("field.gif"));
+    for (String header : new String[] {"syntax='proto3';", "edition='2023';", "edition='2024';"}) {
+      xtext.parseText(header + " message Child {} message Parent { "
+          + "string text = 1; map<string, Child> children = 2; oneof choice { Child child = 3; } }");
+      for (MessageField field : xtext.findAll(MessageField.class)) {
+        if (field.eContainer() instanceof com.google.eclipse.protobuf.protobuf.MapType) continue;
+        String image = images.imageFor(field);
+        assertThat(image, equalTo("field.gif"));
+        assertThat(image, existsInProject());
+      }
+      String image = images.imageFor(xtext.findFirst(OneOf.class));
+      assertThat(image, equalTo("group.gif"));
       assertThat(image, existsInProject());
     }
-    String image = images.imageFor(xtext.findFirst(OneOf.class));
-    assertThat(image, equalTo("group.gif"));
-    assertThat(image, existsInProject());
   }
 
   // syntax = "proto2";

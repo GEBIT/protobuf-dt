@@ -33,6 +33,7 @@ import com.google.inject.Inject;
 import org.apache.log4j.Logger;
 import org.eclipse.emf.common.util.TreeIterator;
 import org.eclipse.emf.ecore.EObject;
+import org.eclipse.emf.ecore.EStructuralFeature;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IRegion;
 import org.eclipse.jface.text.Region;
@@ -184,22 +185,24 @@ public class SmartSemicolonHandler extends SmartInsertHandler {
   }
 
   @VisibleForTesting ReplaceEdit completeWithIndex(INode elementNode, long newIndex) {
-    INode nameNode = null;
+    EObject element = NodeModelUtils.findActualSemanticObjectFor(elementNode);
+    EStructuralFeature name = element == null ? null : element.eClass().getEStructuralFeature("name");
+    INode nameNode = name == null ? null : nodes.firstNodeForFeature(element, name);
     INode equalsNode = null;
     INode optionsBracketNode = null;
     INode groupBraceNode = null;
-    for (INode leafNode : elementNode.getAsTreeIterable()) {
-      if (leafNode.getGrammarElement() instanceof RuleCall
-          && ((RuleCall) leafNode.getGrammarElement()).getRule().getName().equals("ID")) {
-        nameNode = leafNode;
-      } else {
+    if (nameNode != null) {
+      for (ILeafNode leafNode : elementNode.getLeafNodes()) {
+        if (leafNode.isHidden() || leafNode.getOffset() < nameNode.getEndOffset()) continue;
         String text = leafNode.getText();
         if (text.equals("=")) {
           equalsNode = leafNode;
         } else if (text.equals("[")) {
           optionsBracketNode = leafNode;
+          break;
         } else if (text.equals("{")) {
           groupBraceNode = leafNode;
+          break;
         }
       }
     }

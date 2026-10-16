@@ -27,6 +27,7 @@ import org.eclipse.xtext.validation.Check;
 import org.eclipse.xtext.validation.EValidatorRegistrar;
 
 import com.google.eclipse.protobuf.model.util.IndexRanges;
+import com.google.eclipse.protobuf.model.util.FeatureSets;
 import com.google.eclipse.protobuf.model.util.MessageFields;
 import com.google.eclipse.protobuf.model.util.OptionValues;
 import com.google.eclipse.protobuf.model.util.Options;
@@ -61,6 +62,7 @@ public class DataTypeValidator extends AbstractDeclarativeValidator {
   @Inject private StringLiterals strings;
   @Inject private Syntaxes syntaxes;
   @Inject private IndexRanges ranges;
+  @Inject private FeatureSets features;
 
   @Override public void register(EValidatorRegistrar registrar) {}
 
@@ -87,6 +89,10 @@ public class DataTypeValidator extends AbstractDeclarativeValidator {
       if (syntaxes.isProto2(owner) && !messageFields.supportsExplicitDefault((MessageField) owner)) {
         problem("Explicit default values are only allowed on singular scalar or enum fields outside oneofs.", option,
             OPTION_CONTEXT_ERROR);
+      }
+      if (syntaxes.isEditions(owner) && features.hasRequiredMetadata(owner)
+          && !messageFields.supportsExplicitDefault((MessageField) owner)) {
+        problem(Messages.editionDefault, option, EditionValidator.EDITION_DEFAULT);
       }
     } else {
       checkOptionContext(option);
@@ -125,7 +131,17 @@ public class DataTypeValidator extends AbstractDeclarativeValidator {
         problem(extension ? "Extension fields require bracket notation." : "This field is not an extension.",
             field.getName(), OPTION_CONTEXT_ERROR);
       }
-      checkTargets(declaration, enclosingOptionOwner(field), field);
+      if (!isEditionFeatureOption(field)) {
+        checkTargets(declaration, enclosingOptionOwner(field), field);
+      }
+      if (!isEditionFeatureOption(field) || !isMessage(expected)) {
+        for (Value value : fieldValues(field)) {
+          checkSupport(declaration, value, field);
+        }
+      }
+      for (Value value : fieldValues(field)) {
+        checkLegacyEditionOption(declaration, value, field, true);
+      }
       checkReservedNativeDeclaration(declaration, field);
     }
   }
@@ -424,8 +440,20 @@ public class DataTypeValidator extends AbstractDeclarativeValidator {
     if (expectedOwner != null && !isDescriptorType(extendee, expectedOwner)) {
       problem("Option does not extend the applicable " + expectedOwner + ".", option, OPTION_CONTEXT_ERROR);
     }
-    for (IndexedElement declaration : optionPath(option)) {
-      checkTargets(declaration, option.eContainer(), option);
+    boolean feature = isEditionFeatureOption(option);
+    List<IndexedElement> path = optionPath(option);
+    for (int i = 0; i < path.size(); i++) {
+      IndexedElement declaration = path.get(i);
+      boolean terminal = i + 1 == path.size();
+      if (!feature) {
+        checkTargets(declaration, option.eContainer(), option);
+      }
+      if (!feature || terminal && !isMessage(values.typeOf(declaration))) {
+        checkSupport(declaration, terminal ? option.getValue() : null, option);
+      }
+      if (terminal) {
+        checkLegacyEditionOption(declaration, option.getValue(), option, false);
+      }
       checkReservedNativeDeclaration(declaration, option);
     }
     if (!extension) {
@@ -445,7 +473,8 @@ public class DataTypeValidator extends AbstractDeclarativeValidator {
         || isDescriptorType(owner, "MessageOptions") || isDescriptorType(owner, "FieldOptions")
         || isDescriptorType(owner, "EnumOptions") || isDescriptorType(owner, "EnumValueOptions")
         || isDescriptorType(owner, "ServiceOptions") || isDescriptorType(owner, "MethodOptions")
-        || isDescriptorType(owner, "OneofOptions") || isDescriptorType(owner, "ExtensionRangeOptions"))) {
+        || isDescriptorType(owner, "OneofOptions") || isDescriptorType(owner, "ExtensionRangeOptions"))
+        && !(syntaxes.isEditions(source) && features.isFeaturesRoot(declaration, source))) {
       problem("Features are only valid under Editions, not proto2 or proto3.", source, OPTION_CONTEXT_ERROR);
     }
     if ("map_entry".equals(name) && isDescriptorType(declaration.eContainer(), "MessageOptions")) {
@@ -453,10 +482,42 @@ public class DataTypeValidator extends AbstractDeclarativeValidator {
     }
   }
 
+  private boolean isEditionFeatureOption(EObject source) {
+    AbstractOption option = enclosingOption(source);
+    return syntaxes.isEditions(source) && option != null && options.isNative(option)
+        && features.isFeaturesRoot(options.rootSourceOf(option), source);
+  }
+
+  private void checkSupport(IndexedElement declaration, Value value, EObject source) {
+    if (!syntaxes.isEditions(source) || !resolved(declaration)
+        || isEditionFeatureOption(source) && !features.hasRequiredMetadata(source)) return;
+    Literal literal = value instanceof LiteralLink ? ((LiteralLink) value).getTarget() : null;
+    EObject owner = enclosingOptionOwner(source);
+    String error = features.supportError(declaration, literal, owner);
+    if (error != null) {
+      problem(error, source, EditionValidator.FEATURE_SUPPORT);
+    } else {
+      String message = features.deprecationWarning(declaration, literal, owner);
+      if (message != null) warning(message, source, null, EditionValidator.FEATURE_DEPRECATED);
+    }
+  }
+
+  private void checkLegacyEditionOption(IndexedElement declaration, Value value, EObject source, boolean aggregate) {
+    if (!syntaxes.isEditions(source) || !(declaration instanceof MessageField)) return;
+    String name = ((MessageField) declaration).getName();
+    if ("packed".equals(name) && isDescriptorType(declaration.eContainer(), "FieldOptions")) {
+      problem(Messages.editionPacked, source, EditionValidator.EDITION_FEATURE);
+    }
+    if ("java_string_check_utf8".equals(name) && isDescriptorType(declaration.eContainer(), "FileOptions")
+        && isBoolean(value, aggregate) && values.booleanValue(value)) {
+      problem(Messages.editionJavaUtf8, source, EditionValidator.EDITION_FEATURE);
+    }
+  }
+
   private void checkFieldOption(IndexedElement field, String name, AbstractOption option) {
     Value value = option.getValue();
     boolean enabled = isBoolean(value, false) && values.booleanValue(value);
-    if ("packed".equals(name) && enabled
+    if ("packed".equals(name) && !syntaxes.isEditions(option) && enabled
         && (!(field instanceof MessageField) || !messageFields.isPackable((MessageField) field))) {
       problem("[packed = true] can only be specified for repeated primitive fields.", option, OPTION_CONTEXT_ERROR);
     }
@@ -511,18 +572,7 @@ public class DataTypeValidator extends AbstractDeclarativeValidator {
   private void checkTargets(IndexedElement declaration, EObject owner, EObject source) {
     String target = targetName(owner, source);
     if (target == null) return;
-    boolean restricted = false;
-    boolean allowed = false;
-    for (AbstractOption metadata : optionsOf(declaration)) {
-      if (nativeOption(metadata, "FieldOptions", "targets")) {
-        String declared = enumName(metadata.getValue());
-        if (declared != null) {
-          restricted = true;
-          allowed |= target.equals(declared);
-        }
-      }
-    }
-    if (restricted && !allowed) {
+    if (!features.allowsTarget(declaration, owner, source)) {
       problem("Option field is not allowed on this declaration kind (" + target + ").", source, OPTION_CONTEXT_ERROR);
     }
   }
@@ -630,11 +680,14 @@ public class DataTypeValidator extends AbstractDeclarativeValidator {
       if (nativeOption(option, "MessageOptions", "deprecated_legacy_json_field_conflicts")
           && isBoolean(option.getValue(), false) && values.booleanValue(option.getValue())) return;
     }
-    checkJsonNames(owner, fields, false);
-    checkJsonNames(owner, fields, true);
+    String jsonFormat = syntaxes.isEditions(owner) ? features.coreValue(owner, "json_format") : null;
+    if (syntaxes.isEditions(owner) && jsonFormat == null) return;
+    boolean legacy = syntaxes.isProto2(owner) || "LEGACY_BEST_EFFORT".equals(jsonFormat);
+    checkJsonNames(owner, fields, false, legacy);
+    checkJsonNames(owner, fields, true, legacy);
   }
 
-  private void checkJsonNames(EObject owner, List<IndexedElement> fields, boolean overrides) {
+  private void checkJsonNames(EObject owner, List<IndexedElement> fields, boolean overrides, boolean legacy) {
     Map<String, IndexedElement> seen = new HashMap<String, IndexedElement>();
     for (IndexedElement field : fields) {
       String fieldName = jsonFieldName(field);
@@ -648,7 +701,14 @@ public class DataTypeValidator extends AbstractDeclarativeValidator {
         // Legacy proto2 reports a warning if either colliding spelling is a default JSON name.
         boolean involvesDefault = !overrides || name.equals(defaultName)
             || name.equals(defaultJsonName(jsonFieldName(previous)));
-        if (involvesDefault && syntaxes.isProto2(owner)) {
+        if (syntaxes.isEditions(owner) && hasCustomJsonName(field) && hasCustomJsonName(previous)) {
+          String customName = jsonName(field, defaultName);
+          if (customName != null
+              && customName.equals(jsonName(previous, defaultJsonName(jsonFieldName(previous))))) {
+            involvesDefault = false;
+          }
+        }
+        if (involvesDefault && legacy) {
           warning("The JSON camel-case name conflicts with another field.", field, null, JSON_NAME_ERROR);
         } else {
           problem("The JSON name conflicts with another field.", field, JSON_NAME_ERROR);
@@ -676,6 +736,13 @@ public class DataTypeValidator extends AbstractDeclarativeValidator {
       if (option instanceof JsonNameFieldOption) return stringValue(option.getValue());
     }
     return defaultName;
+  }
+
+  private boolean hasCustomJsonName(IndexedElement field) {
+    for (EObject child : field.eContents()) {
+      if (child instanceof JsonNameFieldOption) return true;
+    }
+    return false;
   }
 
   private String jsonFieldName(IndexedElement field) {

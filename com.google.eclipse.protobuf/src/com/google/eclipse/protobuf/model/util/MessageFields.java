@@ -58,16 +58,31 @@ import com.google.inject.Singleton;
 @Singleton
 public class MessageFields {
   @Inject private Syntaxes syntaxes;
+  @Inject private Provider<FeatureSets> features;
   @Inject private final IResourceScopeCache cache = IResourceScopeCache.NullImpl.INSTANCE;
 
   public boolean supportsExplicitDefault(MessageField field) {
-    if (field == null || !syntaxes.isProto2(field) || field.eContainer() instanceof OneOf
-        || (field.getModifier() != ModifierEnum.OPTIONAL && field.getModifier() != ModifierEnum.REQUIRED)) {
+    if (field == null || field.eContainer() instanceof OneOf) {
+      return false;
+    }
+    boolean proto2 = syntaxes.isProto2(field);
+    if (proto2) {
+      if (field.getModifier() != ModifierEnum.OPTIONAL && field.getModifier() != ModifierEnum.REQUIRED) {
+        return false;
+      }
+    } else if (!syntaxes.isEditions(field) || field.getModifier() != ModifierEnum.UNSPECIFIED) {
       return false;
     }
     ScalarType scalar = scalarTypeOf(field);
     Enum enumeration = enumTypeOf(field);
-    return scalar != null || (enumeration != null && !enumeration.eIsProxy());
+    if (scalar == null && (enumeration == null || enumeration.eIsProxy())) {
+      return false;
+    }
+    if (proto2) {
+      return true;
+    }
+    String presence = features.get().coreValue(field, "field_presence");
+    return "EXPLICIT".equals(presence) || "LEGACY_REQUIRED".equals(presence);
   }
 
   public boolean isPackable(MessageField field) {

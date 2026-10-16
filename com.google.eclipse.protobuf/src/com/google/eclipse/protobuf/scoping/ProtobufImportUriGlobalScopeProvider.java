@@ -9,14 +9,8 @@
 package com.google.eclipse.protobuf.scoping;
 
 import com.google.common.base.Predicate;
-import com.google.eclipse.protobuf.model.util.Imports;
-import com.google.eclipse.protobuf.model.util.Protobufs;
 import com.google.eclipse.protobuf.model.util.Resources;
-import com.google.eclipse.protobuf.protobuf.Import;
-import com.google.eclipse.protobuf.protobuf.Protobuf;
-import com.google.eclipse.protobuf.util.Uris;
 import com.google.inject.Inject;
-import com.google.inject.Provider;
 
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.EClass;
@@ -26,13 +20,11 @@ import org.eclipse.xtext.resource.IResourceDescription;
 import org.eclipse.xtext.resource.IResourceDescriptions;
 import org.eclipse.xtext.scoping.IScope;
 import org.eclipse.xtext.scoping.impl.ImportUriGlobalScopeProvider;
-import org.eclipse.xtext.util.IResourceScopeCache;
 
 import java.util.LinkedHashSet;
 
 /**
- * A global scope provider that reads each {@link Import} in the protobuf file, resolves it, and
- * caches the result.
+ * A global scope provider exposing the union of ordinary and option-only imports.
  */
 public class ProtobufImportUriGlobalScopeProvider extends ImportUriGlobalScopeProvider {
   @Override
@@ -47,55 +39,11 @@ public class ProtobufImportUriGlobalScopeProvider extends ImportUriGlobalScopePr
     return ProtobufSelectableBasedScope.createScope(parent, description, filter, type, ignoreCase);
   }
 
-  @Inject private Protobufs protobufs;
+  @Inject private ImportVisibility visibility;
   @Inject private Resources resources;
-  @Inject private Imports imports;
-  @Inject private IResourceScopeCache cache;
-  @Inject private ProtoDescriptorProvider descriptorProvider;
-  @Inject private Uris uris;
 
   @Override
   protected LinkedHashSet<URI> getImportedUris(final Resource resource) {
-    return cache.get(
-        ProtobufImportUriGlobalScopeProvider.class.getName(),
-        resource,
-        new Provider<LinkedHashSet<URI>>() {
-          @Override
-          public LinkedHashSet<URI> get() {
-            LinkedHashSet<URI> importedUris = new LinkedHashSet<>();
-            Protobuf protobuf = resources.rootOf(resource);
-            if (protobuf == null) {
-              return importedUris;
-            }
-            for (Import singleImport : protobufs.importsIn(protobuf)) {
-              resolveImport(importedUris, singleImport);
-            }
-            return importedUris;
-          }
-
-          private void addPublicImportedUris(Protobuf protobuf, LinkedHashSet<URI> importedUris) {
-            for (Import singleImport : protobufs.publicImportsIn(protobuf)) {
-              if (!importedUris.contains(imports.resolvedUriOf(singleImport))) {
-                resolveImport(importedUris, singleImport);
-              }
-            }
-          }
-
-          private void resolveImport(LinkedHashSet<URI> importedUris, Import singleImport) {
-            if (imports.isResolved(singleImport)) {
-              Protobuf root = resources.rootOf(imports.importedResource(singleImport));
-              if (root != null) {
-                importedUris.add(imports.resolvedUriOf(singleImport));
-                addPublicImportedUris(root, importedUris);
-              }
-            } else if (imports.hasUnresolvedDescriptorUri(singleImport)) {
-              URI location = descriptorProvider.descriptorLocation(
-                  singleImport.eResource(), imports.getPath(singleImport));
-              if (location != null && uris.referredResourceExists(location)) {
-                importedUris.add(location);
-              }
-            }
-          }
-        });
+    return new LinkedHashSet<>(visibility.importedUris(resources.rootOf(resource), true));
   }
 }

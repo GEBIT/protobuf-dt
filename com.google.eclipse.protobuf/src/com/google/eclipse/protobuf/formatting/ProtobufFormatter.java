@@ -59,11 +59,13 @@ public class ProtobufFormatter extends AbstractDeclarativeFormatter {
     ProtobufGrammarAccess g = (ProtobufGrammarAccess) getGrammarAccess();
     c.setLinewrap(0, 1, 2).before(g.getSL_COMMENTRule());
     c.setLinewrap(2).after(g.getSyntaxRule());
+    c.setLinewrap(2).after(g.getEditionRule());
     c.setLinewrap(2).before(g.getPackageRule());
     c.setLinewrap(2).after(g.getPackageRule());
     c.setLinewrap(1,1,2).after(g.getNormalImportRule());
     c.setLinewrap(1,1,2).after(g.getPublicImportRule());
     c.setLinewrap(1,1,2).after(g.getWeakImportRule());
+    c.setLinewrap(1,1,2).after(g.getOptionImportRule());
     c.setLinewrap(1,1,2).after(g.getNativeOptionRule());
     c.setLinewrap(1,1,2).after(g.getCustomOptionRule());
     c.setLinewrap(1,2,3).before(g.getMessageRule());
@@ -79,6 +81,7 @@ public class ProtobufFormatter extends AbstractDeclarativeFormatter {
     c.setLinewrap(1).after(g.getRpcRule());
     c.setLinewrap(2).after(g.getServiceRule());
     c.setLinewrap(1).after(g.getStreamRule());
+    c.setSpace(space()).after(g.getVisibilityRule());
 
     c.setLinewrap(1).between(g.getCHUNKRule(), g.getCHUNKRule());
     c.setLinewrap(1).between(g.getML_COMMENTRule(), g.getCHUNKRule());
@@ -146,7 +149,7 @@ public class ProtobufFormatter extends AbstractDeclarativeFormatter {
 		this.documentStart = documentStart;
 				
 		ProtobufGrammarAccess g = (ProtobufGrammarAccess) getGrammarAccess();
-		openingCurlyBracketRuleCalls.add(g.getMessageAccess().getLeftCurlyBracketKeyword_2());
+		openingCurlyBracketRuleCalls.add(g.getMessageAccess().getLeftCurlyBracketKeyword_3());
 		openingCurlyBracketRuleCalls.add(g.getOneOfAccess().getLeftCurlyBracketKeyword_3()); 
 		
 		slCommentType = g.getSL_COMMENTRule().getType();

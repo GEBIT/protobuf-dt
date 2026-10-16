@@ -36,7 +36,7 @@ import com.google.inject.Singleton;
 @Singleton public class Literals {
 	private final static SimpleAttributeResolver<EObject, Long> INDEX_RESOLVER = newResolver(long.class, "index");
   @Inject private IndexRanges indexRanges;
-  @Inject private Syntaxes syntaxes;
+  @Inject private FeatureSets features;
 	
   /** Returns a free int32 enum value, or Long.MIN_VALUE if none exists. */
   public long calculateNewIndexOf(Literal literal) {
@@ -81,7 +81,7 @@ import com.google.inject.Singleton;
         }
       }
     }
-    if (first && assignedIndex == Long.MIN_VALUE && syntaxes.isProto3(literal)) {
+    if (first && assignedIndex == Long.MIN_VALUE && Boolean.TRUE.equals(features.isOpenEnum(enumeration))) {
       return available.contains(0L) ? 0L : Long.MIN_VALUE;
     }
     long candidate = firstAtOrAfter(available, highest + 1L);

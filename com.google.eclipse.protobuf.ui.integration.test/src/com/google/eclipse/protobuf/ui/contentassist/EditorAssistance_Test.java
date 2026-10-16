@@ -4,6 +4,7 @@ import static com.google.eclipse.protobuf.junit.core.XtextRule.createWith;
 import static com.google.eclipse.protobuf.preferences.general.PreferenceNames.DESCRIPTOR_PROTO_PATH;
 import static com.google.eclipse.protobuf.validation.ProtobufJavaValidator.*;
 import static com.google.eclipse.protobuf.validation.DataTypeValidator.EXPECTED_BOOL_ERROR;
+import static com.google.eclipse.protobuf.validation.EditionValidator.*;
 import static org.junit.Assert.*;
 
 import java.io.ByteArrayInputStream;
@@ -364,6 +365,426 @@ public class EditorAssistance_Test {
         return null;
       });
     }
+  }
+
+  @Test public void should_apply_both_editions_in_all_three_header_positions() throws Exception {
+    for (String year : new String[] {"2023", "2024"}) {
+      for (String input : new String[] {"|", "edition |", "edition = |"}) {
+        onUi(() -> {
+          Map<String, ICompletionProposal> choices = complete(input);
+          String suffix = "\"" + year + "\";";
+          apply(choices, input.equals("|") ? "edition = " + suffix
+              : input.equals("edition |") ? "= " + suffix : suffix);
+          assertEquals("edition = " + suffix, editor.getDocument().get());
+          assertNoErrors();
+          return null;
+        });
+      }
+    }
+  }
+
+  @Test public void should_not_offer_a_second_header_even_after_recovered_headers() throws Exception {
+    onUi(() -> {
+      for (String prefix : new String[] {"edition=\"2023\"; ", "edition=\"2024\"; ",
+          "syntax=\"proto2\"; ", "message M {} edition=\"2024\"; "}) {
+        Map<String, ICompletionProposal> choices = complete(prefix + "|");
+        absent(choices, "syntax", "edition", "syntax = \"proto2\";", "syntax = \"proto3\";",
+            "edition = \"2023\";", "edition = \"2024\";");
+      }
+      return null;
+    });
+  }
+
+  @Test public void should_repair_unsupported_editions_without_changing_dialect() throws Exception {
+    for (String year : new String[] {"2023", "2024"}) {
+      onUi(() -> {
+        open("edition=\"2025\"; message M { int32 value=1; }");
+        applyFix(UNSUPPORTED_EDITION, year);
+        assertTrue(editor.getDocument().get().contains(year));
+        assertFalse(editor.getDocument().get().contains("syntax"));
+        assertNoErrors();
+        return null;
+      });
+    }
+  }
+
+  @Test public void should_remove_both_forbidden_edition_field_modifiers() throws Exception {
+    for (String year : new String[] {"2023", "2024"}) {
+      for (String modifier : new String[] {"optional", "required"}) {
+        onUi(() -> {
+          open("edition=\"" + year + "\"; message M { " + modifier + " int32 value=1; }");
+          applyFix(EDITION_FIELD_MODIFIER, "Remove modifier");
+          assertFalse(editor.getDocument().get().contains(modifier));
+          assertTrue(editor.getDocument().get().contains("int32 value=1"));
+          assertNoErrors();
+          return null;
+        });
+      }
+    }
+  }
+
+  @Test public void should_remove_entire_edition_defaults_preserving_all_neighbor_options() throws Exception {
+    for (String options : new String[] {"default=7", "default=7, deprecated=true",
+        "deprecated=true, default=7", "deprecated=true, default=7, json_name=\"renamed\""}) {
+      onUi(() -> {
+        open("edition=\"2023\"; option features.field_presence=IMPLICIT; "
+            + "message M { int32 count=1 [" + options + "]; }");
+        applyFix(EDITION_DEFAULT, "Remove explicit default");
+        String text = editor.getDocument().get();
+        assertFalse(text.contains("default"));
+        if (options.equals("default=7")) assertFalse(text.contains("["));
+        if (options.contains("deprecated")) assertTrue(text.contains("deprecated=true"));
+        if (options.contains("json_name")) assertTrue(text.contains("json_name=\"renamed\""));
+        assertNoErrors();
+        return null;
+      });
+    }
+  }
+
+  @Test public void should_not_offer_value_only_repairs_for_forbidden_edition_defaults() throws Exception {
+    onUi(() -> {
+      for (String field : new String[] {"bool enabled=1 [default=\"bad\"]",
+          "string text=1 [default=true]"}) {
+        open("edition=\"2023\"; option features.field_presence=IMPLICIT; message M { " + field + "; }");
+        boolean forbidden = false;
+        for (Issue issue : issues()) {
+          forbidden |= EDITION_DEFAULT.equals(issue.getCode());
+          for (IssueResolution resolution : fixes.getResolutions(issue)) {
+            assertFalse(resolution.getLabel(), resolution.getLabel().equals("true"));
+            assertFalse(resolution.getLabel(), resolution.getLabel().equals("false"));
+            if (!EDITION_DEFAULT.equals(issue.getCode())) {
+              assertTrue(issue.toString(), fixes.getResolutions(issue).isEmpty());
+            }
+          }
+        }
+        assertTrue("Missing forbidden-default diagnostic", forbidden);
+        applyFix(EDITION_DEFAULT, "Remove explicit default");
+        assertNoErrors();
+      }
+      return null;
+    });
+  }
+
+  @Test public void should_apply_edition_feature_roots_paths_aggregates_and_values() throws Exception {
+    onUi(() -> {
+      Map<String, ICompletionProposal> choices = complete("edition=\"2023\"; option |={field_presence:EXPLICIT};");
+      present(choices, "features");
+      absent(choices, "map_entry");
+      apply(choices, "features");
+      assertNoErrors();
+      choices = complete("edition=\"2023\"; option features.|=EXPLICIT;");
+      present(choices, "field_presence", "enum_type", "repeated_field_encoding");
+      absent(choices, "enforce_naming_style", "default_symbol_visibility", "enforce_proto_limits");
+      apply(choices, "field_presence");
+      assertNoErrors();
+      for (String[] aggregate : new String[][] {{"{", "}"}, {"<", ">"}}) {
+        choices = complete("edition=\"2023\"; option features=" + aggregate[0]
+            + " |:IMPLICIT " + aggregate[1] + ";");
+        apply(choices, "field_presence");
+        assertNoErrors();
+        choices = complete("edition=\"2023\"; option features=" + aggregate[0]
+            + " field_presence:| " + aggregate[1] + ";");
+        present(choices, "EXPLICIT", "IMPLICIT");
+        absent(choices, "FIELD_PRESENCE_UNKNOWN", "LEGACY_REQUIRED");
+        apply(choices, "EXPLICIT");
+        assertNoErrors();
+      }
+      choices = complete("edition=\"2023\"; message M { int32 value=1 [features.field_presence=|]; }");
+      present(choices, "EXPLICIT", "IMPLICIT", "LEGACY_REQUIRED");
+      absent(choices, "FIELD_PRESENCE_UNKNOWN");
+      apply(choices, "LEGACY_REQUIRED");
+      assertNoErrors();
+      return null;
+    });
+  }
+
+  @Test public void should_filter_feature_targets_field_kinds_and_assigned_spellings() throws Exception {
+    onUi(() -> {
+      Map<String, ICompletionProposal> choices = complete("edition=\"2023\"; message M { int32 value=1 [features.|=EXPLICIT]; }");
+      present(choices, "field_presence");
+      absent(choices, "enum_type", "repeated_field_encoding", "utf8_validation", "message_encoding");
+      choices = complete("edition=\"2023\"; message M { repeated int32 values=1 [|]; }");
+      present(choices, "features");
+      absent(choices, "packed", "default");
+      choices = complete("edition=\"2023\"; message M { repeated int32 values=1 [features.|=PACKED]; }");
+      present(choices, "repeated_field_encoding");
+      absent(choices, "field_presence", "utf8_validation", "message_encoding");
+      apply(choices, "repeated_field_encoding");
+      assertNoErrors();
+      choices = complete("edition=\"2023\"; option features.field_presence=IMPLICIT; "
+          + "option features={ |:OPEN };");
+      absent(choices, "field_presence");
+      apply(choices, "enum_type");
+      assertNoErrors();
+      choices = complete("edition=\"2023\"; option features={field_presence:IMPLICIT}; "
+          + "option features.|=OPEN;");
+      absent(choices, "field_presence");
+      apply(choices, "enum_type");
+      assertNoErrors();
+      choices = complete("edition=\"2023\"; option features.field_presence=IMPLICIT; "
+          + "message M { int32 value=1 [features.|=EXPLICIT, default=7]; }");
+      apply(choices, "field_presence");
+      assertNoErrors();
+      return null;
+    });
+  }
+
+  @Test public void should_use_effective_presence_for_default_shorthand_and_typed_values() throws Exception {
+    onUi(() -> {
+      for (String presence : new String[] {"EXPLICIT", "LEGACY_REQUIRED"}) {
+        String prefix = "edition=\"2023\"; message M { bool enabled=1 [features.field_presence=" + presence;
+        Map<String, ICompletionProposal> choices = complete(prefix + ", default=|]; }");
+        present(choices, "true", "false");
+        apply(choices, "true");
+        assertNoErrors();
+      }
+      Map<String, ICompletionProposal> choices = complete("edition=\"2023\"; message M { bool enabled=1 |; }");
+      apply(choices, "[default = ]");
+      assertTrue(editor.getDocument().get().contains("[default = ]"));
+      choices = complete("edition=\"2023\"; message M { bool enabled=1 [default=|]; }");
+      apply(choices, "false");
+      assertNoErrors();
+      choices = complete("edition=\"2023\"; message M { string text=1 [default=|]; }");
+      apply(choices, "\"\"");
+      assertNoErrors();
+      choices = complete("edition=\"2023\"; message M { int32 value=1 [default=|]; }");
+      apply(choices, "0");
+      assertNoErrors();
+      assertTrue(editor.getDocument().get().contains("default=0"));
+      choices = complete("edition=\"2023\"; enum E { ZERO=0; FIRST=1; } message M { E value=1 [default=|]; }");
+      present(choices, "ZERO", "FIRST");
+      apply(choices, "FIRST");
+      assertNoErrors();
+      for (String body : new String[] {"bool enabled=1 [features.field_presence=IMPLICIT, default=|];",
+          "repeated bool enabled=1 [default=|];", "M child=1 [default=|];",
+          "oneof choice { bool enabled=1 [default=|]; }"}) {
+        choices = complete("edition=\"2023\"; message M { " + body + " }");
+        absent(choices, "true", "false", "\"\"");
+      }
+      for (String body : new String[] {"repeated bool enabled=1 |;", "M child=1 |;",
+          "oneof choice { bool enabled=1 |; }"}) {
+        choices = complete("edition=\"2023\"; message M { " + body + " }");
+        absent(choices, "[default = ]");
+      }
+      choices = complete("edition=\"2023\"; option features.field_presence=IMPLICIT; message M { bool enabled=1 |; }");
+      absent(choices, "[default = ]");
+      return null;
+    });
+  }
+
+  @Test public void should_apply_keyword_identifiers_without_reintroducing_edition_modifiers() throws Exception {
+    onUi(() -> {
+      for (String year : new String[] {"2023", "2024"}) {
+        String prefix = "edition=\"" + year + "\"; ";
+        Map<String, ICompletionProposal> choices = complete(prefix + "message M { | }");
+        absent(choices, "optional", "required", "group");
+        present(choices, "repeated", "map", "extensions", "extend");
+        choices = complete(prefix + "service S { | }");
+        present(choices, "rpc");
+        absent(choices, "stream");
+        choices = complete(prefix + "message M { oneof choice { | } }");
+        absent(choices, "optional", "required", "repeated", "map", "group");
+        for (String name : new String[] {"edition", "export", "local", "optional", "required"}) {
+          choices = complete(prefix + "message M { string | = 1; }");
+          apply(choices, name);
+          assertTrue(editor.getDocument().get().contains("string " + name + " = 1"));
+          assertNoErrors();
+          choices = complete(prefix + "message M { string " + name.substring(0, 2) + "| = 1; }");
+          apply(choices, name);
+          assertNoErrors();
+        }
+      }
+      return null;
+    });
+  }
+
+  @Test public void should_offer_2024_visibility_and_option_imports_only_at_legal_positions() throws Exception {
+    onUi(() -> {
+      Map<String, ICompletionProposal> choices = complete("edition=\"2023\"; | message M {}");
+      absent(choices, "export", "local");
+      choices = complete("edition=\"2024\"; | message M {}");
+      present(choices, "export", "local");
+      apply(choices, "export");
+      assertNoErrors();
+      choices = complete("edition=\"2024\"; | enum E { ZERO=0; }");
+      apply(choices, "local");
+      assertNoErrors();
+      choices = complete("edition=\"2024\"; message M { | int32 value=1; }");
+      absent(choices, "export", "local");
+      choices = complete("edition=\"2023\"; import | \"legacy.proto\";");
+      present(choices, "weak");
+      absent(choices, "option");
+      choices = complete("edition=\"2024\"; import | \"google/protobuf/java_features.proto\";");
+      present(choices, "option");
+      absent(choices, "weak");
+      apply(choices, "option");
+      assertNoErrors();
+      String strict = "edition=\"2024\"; option features.default_symbol_visibility=STRICT; ";
+      choices = complete(strict + "message M { | message Nested {} }");
+      present(choices, "local");
+      absent(choices, "export");
+      apply(choices, "local");
+      assertNoErrors();
+      choices = complete(strict + "message M { | enum E { ZERO=0; } }");
+      absent(choices, "export");
+      choices = complete(strict + "local message Namespace { reserved 1 to max; | enum E { ZERO=0; } }");
+      apply(choices, "export");
+      assertNoErrors();
+      return null;
+    });
+  }
+
+  @Test public void should_use_actual_import_modes_and_visibility_in_applied_completion() throws Exception {
+    onUi(() -> {
+      write("visibility.proto", "edition=\"2024\"; package visible; "
+          + "message Public { message Hidden {} export message Exposed {} } local message Private {}");
+      for (String dialect : new String[] {"syntax=\"proto2\"", "syntax=\"proto3\"", "edition=\"2024\""}) {
+        String modifier = dialect.contains("proto2") ? "optional " : "";
+        Map<String, ICompletionProposal> choices = complete(dialect
+            + "; import \"visibility.proto\"; message M { " + modifier + "| value=1; }");
+        present(choices, "visible.Public", "visible.Public.Exposed");
+        absent(choices, "visible.Public.Hidden", "visible.Private");
+        apply(choices, "visible.Public.Exposed");
+        assertNoErrors();
+      }
+      write("option-only.proto", "syntax=\"proto2\"; " + DESCRIPTOR_IMPORT
+          + "package options; message Payload { optional bool enabled=1; extensions 100 to max; } "
+          + "extend google.protobuf.FileOptions { optional Payload settings=50001; }");
+      String prefix = "edition=\"2024\"; import option \"option-only.proto\"; ";
+      Map<String, ICompletionProposal> choices = complete(prefix + "message M { | value=1; }");
+      absent(choices, "options.Payload");
+      choices = complete(prefix + "service S { rpc Get(|) returns (options.Payload); }");
+      absent(choices, "options.Payload");
+      choices = complete(prefix + "extend | { int32 extra=100; }");
+      absent(choices, "options.Payload");
+      choices = complete(prefix + "option (|)={enabled:true};");
+      apply(choices, "options.settings");
+      assertNoErrors();
+      choices = complete(prefix + "option (options.settings)={ |:true };");
+      apply(choices, "enabled");
+      assertNoErrors();
+      choices = complete("edition=\"2024\"; import \"option-only.proto\"; message M { | value=1; }");
+      apply(choices, "options.Payload");
+      assertNoErrors();
+      choices = complete("edition=\"2024\"; import \"option-only.proto\"; "
+          + "service S { rpc Get(|) returns (options.Payload); }");
+      apply(choices, "options.Payload");
+      assertNoErrors();
+      choices = complete("edition=\"2024\"; import \"option-only.proto\"; extend | { int32 extra=100; }");
+      apply(choices, "options.Payload");
+      assertNoErrors();
+      return null;
+    });
+  }
+
+  @Test public void should_exclude_closed_edition_enums_from_proto3_type_completion() throws Exception {
+    onUi(() -> {
+      write("edition-enums.proto", "edition=\"2023\"; package editions; "
+          + "enum Open { ZERO=0; } enum Closed { option features.enum_type=CLOSED; FIRST=1; }");
+      Map<String, ICompletionProposal> choices = complete("syntax=\"proto3\"; import \"edition-enums.proto\"; "
+          + "message M { | value=1; }");
+      present(choices, "editions.Open");
+      absent(choices, "editions.Closed");
+      apply(choices, "editions.Open");
+      assertNoErrors();
+      choices = complete("edition=\"2023\"; import \"edition-enums.proto\"; message M { | value=1; }");
+      apply(choices, "editions.Closed");
+      assertNoErrors();
+      return null;
+    });
+  }
+
+  @Test public void should_apply_custom_feature_extensions_and_filter_metadata_windows() throws Exception {
+    onUi(() -> {
+      write("features.proto", featureDefinitions());
+      String prefix = "edition=\"2023\"; import \"features.proto\"; ";
+      Map<String, ICompletionProposal> choices = complete(prefix + "option features.(|).enabled=true;");
+      apply(choices, "feat.custom");
+      assertNoErrors();
+      choices = complete(prefix + "option features.(feat.custom).|=true;");
+      present(choices, "enabled", "removed", "deprecated", "mode");
+      absent(choices, "late");
+      apply(choices, "enabled");
+      assertNoErrors();
+      prefix = "edition=\"2024\"; import option \"features.proto\"; ";
+      choices = complete(prefix + "option features.(feat.custom).|=true;");
+      present(choices, "enabled", "late", "deprecated", "mode");
+      absent(choices, "removed");
+      apply(choices, "late");
+      assertNoErrors();
+      choices = complete(prefix + "option features={ [|]:{enabled:true} };");
+      apply(choices, "feat.custom");
+      assertNoErrors();
+      choices = complete(prefix + "option features={ [feat.custom]:{ |:true } };");
+      present(choices, "enabled", "late", "deprecated");
+      absent(choices, "removed");
+      apply(choices, "deprecated");
+      assertNoErrors();
+      choices = complete(prefix + "option features.(feat.custom).mode=|;");
+      present(choices, "MODE_ZERO");
+      absent(choices, "MODE_RETIRED");
+      apply(choices, "MODE_ZERO");
+      assertNoErrors();
+      choices = complete(prefix + "message M { int32 value=1 [features.(feat.custom).|=true]; }");
+      present(choices, "enabled");
+      absent(choices, "late", "removed", "deprecated", "mode");
+      apply(choices, "enabled");
+      assertNoErrors();
+      return null;
+    });
+  }
+
+  @Test public void should_apply_java_feature_values_with_targets_and_support_windows() throws Exception {
+    onUi(() -> {
+      String prefix = "edition=\"2023\"; import \"google/protobuf/java_features.proto\"; ";
+      Map<String, ICompletionProposal> choices = complete(prefix + "option features.(pb.java).|=true;");
+      absent(choices, "large_enum", "nest_in_file_class");
+      choices = complete(prefix + "option | = true;");
+      present(choices, "java_multiple_files");
+      apply(choices, "java_multiple_files");
+      assertNoErrors();
+      prefix = "edition=\"2024\"; import option \"google/protobuf/java_features.proto\"; ";
+      choices = complete(prefix + "option | = true;");
+      absent(choices, "java_multiple_files");
+      choices = complete(prefix + "option features.(pb.java).|=true;");
+      present(choices, "large_enum");
+      absent(choices, "use_old_outer_classname_default");
+      apply(choices, "large_enum");
+      assertNoErrors();
+      choices = complete(prefix + "message M { option features.(pb.java).nest_in_file_class=|; }");
+      present(choices, "YES", "NO");
+      absent(choices, "LEGACY", "NEST_IN_FILE_CLASS_UNKNOWN", "1");
+      apply(choices, "YES");
+      assertNoErrors();
+      choices = complete(prefix + "message M { message Nested { option features.(pb.java).|=YES; } }");
+      absent(choices, "nest_in_file_class");
+      choices = complete(prefix + "option features.(pb.java).utf8_validation=|;");
+      present(choices, "VERIFY");
+      apply(choices, "VERIFY");
+      assertNoErrors();
+      return null;
+    });
+  }
+
+  private static String featureDefinitions() {
+    return "syntax=\"proto2\"; " + DESCRIPTOR_IMPORT + "package feat; "
+        + "extend google.protobuf.FeatureSet { optional Payload custom=9995; } message Payload { "
+        + "optional bool enabled=1 [targets=TARGET_TYPE_FILE, targets=TARGET_TYPE_FIELD, "
+        + "feature_support={edition_introduced:EDITION_2023}, "
+        + "edition_defaults={edition:EDITION_LEGACY value:\"true\"}]; "
+        + "optional bool late=2 [targets=TARGET_TYPE_FILE, feature_support={edition_introduced:EDITION_2024}, "
+        + "edition_defaults={edition:EDITION_LEGACY value:\"false\"}]; "
+        + "optional bool removed=3 [targets=TARGET_TYPE_FILE, feature_support={edition_introduced:EDITION_2023 "
+        + "edition_removed:EDITION_2024 removal_error:\"Use enabled\"}, "
+        + "edition_defaults={edition:EDITION_LEGACY value:\"true\"}, "
+        + "edition_defaults={edition:EDITION_2024 value:\"false\"}]; "
+        + "optional bool deprecated=4 [targets=TARGET_TYPE_FILE, feature_support={edition_introduced:EDITION_2023 "
+        + "edition_deprecated:EDITION_2024 deprecation_warning:\"Prefer enabled\"}, "
+        + "edition_defaults={edition:EDITION_LEGACY value:\"false\"}]; "
+        + "enum Mode { MODE_ZERO=0; MODE_RETIRED=1 [feature_support={edition_introduced:EDITION_2023 "
+        + "edition_removed:EDITION_2024 removal_error:\"Use MODE_ZERO\"}]; } "
+        + "optional Mode mode=5 [targets=TARGET_TYPE_FILE, feature_support={edition_introduced:EDITION_2023}, "
+        + "edition_defaults={edition:EDITION_LEGACY value:\"MODE_ZERO\"}]; }";
   }
 
   private Map<String, ICompletionProposal> complete(String marked) throws Exception {

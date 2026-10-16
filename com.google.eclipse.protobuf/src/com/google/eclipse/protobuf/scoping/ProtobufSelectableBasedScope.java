@@ -56,4 +56,10 @@ public class ProtobufSelectableBasedScope extends SelectableBasedScope {
   public IEObjectDescription getSingleElement(QualifiedName name) {
     return super.getSingleElement(removeLeadingDot(name));
   }
+
+  /** FilteringScope performs single-name lookups through this enumerable lookup. */
+  @Override
+  public Iterable<IEObjectDescription> getElements(QualifiedName name) {
+    return super.getElements(removeLeadingDot(name));
+  }
 }

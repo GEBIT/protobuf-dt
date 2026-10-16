@@ -23,6 +23,7 @@ import com.google.eclipse.protobuf.ui.editor.ProtobufUriEditorOpener;
 import com.google.eclipse.protobuf.ui.editor.formatting.CustomPreferenceStoreIndentationInformation;
 import com.google.eclipse.protobuf.ui.editor.formatting.EditorMaximumLineWidthProvider;
 import com.google.eclipse.protobuf.ui.editor.hyperlinking.ProtobufHyperlinkDetector;
+import com.google.eclipse.protobuf.ui.editor.hyperlinking.ProtobufHyperlinkHelper;
 import com.google.eclipse.protobuf.ui.editor.model.ProtobufDocumentProvider;
 import com.google.eclipse.protobuf.ui.editor.syntaxcoloring.HighlightingConfiguration;
 import com.google.eclipse.protobuf.ui.editor.syntaxcoloring.ProtobufAntlrTokenToAttributeIdMapper;
@@ -55,6 +56,7 @@ import org.eclipse.xtext.resource.IResourceServiceProvider;
 import org.eclipse.xtext.ui.LanguageSpecific;
 import org.eclipse.xtext.ui.editor.IURIEditorOpener;
 import org.eclipse.xtext.ui.editor.IXtextEditorCallback;
+import org.eclipse.xtext.ui.editor.hyperlinking.IHyperlinkHelper;
 import org.eclipse.xtext.ui.editor.model.XtextDocumentProvider;
 import org.eclipse.xtext.ui.editor.outline.actions.IOutlineContribution;
 import org.eclipse.xtext.ui.editor.preferences.IPreferenceStoreInitializer;
@@ -100,6 +102,10 @@ public class ProtobufUiModule extends AbstractProtobufUiModule {
 
   @Override public Class<? extends IHyperlinkDetector> bindIHyperlinkDetector() {
     return ProtobufHyperlinkDetector.class;
+  }
+
+  public Class<? extends IHyperlinkHelper> bindIHyperlinkHelper() {
+    return ProtobufHyperlinkHelper.class;
   }
 
   public Class<? extends IParser> bindIParser() {

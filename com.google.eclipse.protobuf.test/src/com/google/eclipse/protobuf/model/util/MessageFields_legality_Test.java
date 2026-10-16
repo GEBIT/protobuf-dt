@@ -1,6 +1,6 @@
 package com.google.eclipse.protobuf.model.util;
 
-import static com.google.eclipse.protobuf.junit.core.UnitTestModule.unitTestModule;
+import static com.google.eclipse.protobuf.junit.core.IntegrationTestModule.integrationTestModule;
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -17,7 +17,7 @@ import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.inject.Inject;
 
 public class MessageFields_legality_Test {
-  @Rule public XtextRule xtext = overrideRuntimeModuleWith(unitTestModule());
+  @Rule public XtextRule xtext = overrideRuntimeModuleWith(integrationTestModule());
   @Inject private MessageFields fields;
 
   // syntax = "proto2";
@@ -65,5 +65,46 @@ public class MessageFields_legality_Test {
     assertEquals("first", owned.get(1).getName());
     assertEquals("second", owned.get(2).getName());
     assertEquals("after", owned.get(3).getName());
+  }
+
+  @Test public void should_allow_editions_defaults_only_with_explicit_singular_scalar_or_enum_presence() {
+    for (String year : new String[] {"2023", "2024"}) {
+      xtext.parseText("edition='" + year + "'; enum E { ZERO=0; } message M { "
+          + "int32 scalar=1; E enumeration=2; repeated int32 numbers=3; repeated string strings=4; "
+          + "M child=5; map<string,int32> entries=6; oneof choice { int32 member=7; } "
+          + "int32 required_value=8 [features.field_presence=LEGACY_REQUIRED]; "
+          + "int32 implicit_value=9 [features.field_presence=IMPLICIT]; }");
+      for (String name : new String[] {"scalar", "enumeration", "required_value"}) {
+        assertTrue(name, fields.supportsExplicitDefault(xtext.find(name, MessageField.class)));
+      }
+      for (String name : new String[] {"numbers", "strings", "child", "entries", "member", "implicit_value"}) {
+        assertFalse(name, fields.supportsExplicitDefault(xtext.find(name, MessageField.class)));
+      }
+      assertTrue(fields.isPackable(xtext.find("numbers", MessageField.class)));
+      assertFalse(fields.isPackable(xtext.find("strings", MessageField.class)));
+      assertFalse(fields.isPackable(xtext.find("scalar", MessageField.class)));
+    }
+  }
+
+  @Test public void should_share_inherited_presence_capability_with_dotted_and_aggregate_overrides() {
+    xtext.parseText("edition='2023'; option features.field_presence=IMPLICIT; message M { "
+        + "int32 inherited=1; int32 dotted=2 [features.field_presence=EXPLICIT]; "
+        + "int32 aggregate=3 [features={field_presence:EXPLICIT}]; "
+        + "message Nested { int32 nested=1; } "
+        + "message Pinned { int32 pinned=1 [features={field_presence:EXPLICIT}]; } "
+        + "extensions 100 to 199; } extend M { int32 extension_value=100; }");
+    for (String name : new String[] {"inherited", "nested"}) {
+      assertFalse(name, fields.supportsExplicitDefault(xtext.find(name, MessageField.class)));
+    }
+    for (String name : new String[] {"dotted", "aggregate", "pinned", "extension_value"}) {
+      assertTrue(name, fields.supportsExplicitDefault(xtext.find(name, MessageField.class)));
+    }
+  }
+
+  @Test public void should_not_guess_default_capability_for_unresolved_or_unknown_editions() {
+    xtext.parseText("edition='2023'; message M { Missing unresolved=1; }");
+    assertFalse(fields.supportsExplicitDefault(xtext.find("unresolved", MessageField.class)));
+    xtext.parseText("edition='2025'; message M { int32 scalar=1; }");
+    assertFalse(fields.supportsExplicitDefault(xtext.find("scalar", MessageField.class)));
   }
 }

@@ -6,16 +6,29 @@ files.
 
 This is a fork of an originally Google-initiated project which has been largely dormant for years and is currently without an official maintainer, albeit the produc t itself has been working reliably for years without any changes. It was forked because it's in active use at GEBIT and some shortcomings regarding missing capabilites have come up.
 
-Files without a syntax declaration use proto2, including nested messages, regardless
+Files without a syntax or edition declaration use proto2, including nested messages, regardless
 of the internal-source filtering preference. Explicit `syntax = "proto3";` supports
 both implicit and optional field labels; `required` is rejected.
-Proto2 defaults and the new-file template remain unchanged. Supporting
-Edition/FeatureSet declarations in proto2 schemas does not enable Editions source syntax.
+Proto2 defaults and the proto2 new-file template remain unchanged.
 
 The language core supports proto3 maps, oneofs, optional presence and streaming RPCs,
 with typed native/custom option aggregates, expanded Any values and exact unsigned-64
 constants. Field, enum, reservation and extension-number diagnostics follow their
 separate protobuf domains; implicit map roles are not source declarations.
+
+Explicit `edition = "2023";` and `edition = "2024";` declarations enable Editions;
+other edition headers remain errors. Editions fields are unlabeled or repeated, with
+presence, packing, enum openness, UTF-8, message encoding and JSON policy resolved
+from typed feature settings and the selected descriptor's metadata. Custom FeatureSet
+extensions, inherited leaf settings, support windows and deprecation warnings use the
+same policy in validation and completion. Incomplete descriptors are diagnosed without
+silently substituting bundled feature definitions.
+
+Edition 2024 supports option-only imports and per-type `export`/`local` visibility in
+the actual reference scopes, including hyperlinks and completion. Naming rules and
+STRICT visibility follow the selected feature policy. Reserved names use identifiers
+in Editions and quoted strings in proto2/proto3. Edition-specific quick fixes repair
+unsupported years and remove forbidden labels or entire explicit defaults.
 
 Bundled `descriptor.proto` and `java_features.proto` come verbatim from
 `com.google.protobuf:protobuf-java:4.36.2` (upstream v36.2); provenance and the upstream
@@ -85,6 +98,10 @@ the build to finish.
 Expand **releng**.
 
 Right-click on **GenerateProtobuf.mwe2.launch** and run this launch config, which should generate the DSL code.
+
+Use this checked-in workflow: its custom generator and Ecore postprocessor preserve
+the shared and transient model roles. Do not substitute stock Xtext generation or
+hand-edit runtime/UI generated parsers, serializers or model implementations.
 
 ## Building a release
 

@@ -56,8 +56,9 @@ import org.junit.rules.TemporaryFolder;
 
 import com.google.eclipse.protobuf.junit.core.XtextRule;
 import com.google.eclipse.protobuf.model.util.Imports;
+import com.google.eclipse.protobuf.model.util.Options;
+import com.google.eclipse.protobuf.protobuf.AbstractOption;
 import com.google.eclipse.protobuf.protobuf.Import;
-import com.google.eclipse.protobuf.protobuf.NativeOption;
 import com.google.eclipse.protobuf.ui.editor.FileOpener;
 import com.google.eclipse.protobuf.ui.editor.UriEditorInput;
 import com.google.eclipse.protobuf.ui.editor.hyperlinking.ProtobufHyperlinkDetector;
@@ -75,6 +76,18 @@ public class ArchiveNavigation_Test {
       + "import \"google/protobuf/descriptor.proto\"; option java_package = \"nested\"; "
       + "message Nested { optional string value = 1; }";
   private static final String STANDALONE = "syntax = \"proto3\"; message Standalone {}";
+  private static final String EDITIONS = "edition = \"2024\"; package archiveproof; "
+      + "import \"google/protobuf/descriptor.proto\"; import option \"archive-features.proto\"; "
+      + "option features.field_presence = EXPLICIT; "
+      + "option features.(archiveproof.archive_features).mode = MODE_ENABLED; "
+      + "message ArchivePayload { string value = 1; }";
+  private static final String ARCHIVE_FEATURES = "syntax = \"proto2\"; package archiveproof; "
+      + "import \"google/protobuf/descriptor.proto\"; "
+      + "extend google.protobuf.FeatureSet { optional ArchiveFeatures archive_features = 9995; } "
+      + "message ArchiveFeatures { enum Mode { MODE_DISABLED = 0; MODE_ENABLED = 1; } "
+      + "optional Mode mode = 1 [targets = TARGET_TYPE_FILE, "
+      + "feature_support = { edition_introduced: EDITION_2023 }, "
+      + "edition_defaults = { edition: EDITION_LEGACY, value: \"MODE_DISABLED\" }]; }";
 
   @Rule public XtextRule xtext = createWith(ProtobufEditorPlugIn.injector());
   @Rule public TemporaryFolder temporary = new TemporaryFolder();
@@ -82,6 +95,7 @@ public class ArchiveNavigation_Test {
   @Inject private ProtobufHyperlinkDetector detector;
   @Inject private IResourceValidator validator;
   @Inject private Imports imports;
+  @Inject private Options options;
   @Inject private FileOpener opener;
 
   private IProject first;
@@ -129,6 +143,99 @@ public class ArchiveNavigation_Test {
       exerciseNavigation(platformUri(jar), "${workspace_loc:" + jar.getFullPath() + "}");
       return null;
     });
+  }
+
+  @Test public void should_follow_external_editions_feature_links_in_each_origin_project() throws Exception {
+    onUi(() -> {
+      Path jar = temporary.newFile("external editions.jar").toPath();
+      Files.write(jar, archive());
+      exerciseEditionsNavigation(URI.createFileURI(jar.toString()), jar.toString());
+      return null;
+    });
+  }
+
+  @Test public void should_follow_workspace_editions_feature_links_in_each_origin_project() throws Exception {
+    onUi(() -> {
+      IFile jar = first.getFile("workspace editions.jar");
+      jar.create(new ByteArrayInputStream(archive()), true, null);
+      exerciseEditionsNavigation(platformUri(jar), "${workspace_loc:" + jar.getFullPath() + "}");
+      return null;
+    });
+  }
+
+  private void exerciseEditionsNavigation(URI jar, String importRoot) throws Exception {
+    stores.getWritablePreferenceStore(first).setValue("paths.directoryPaths", importRoot);
+    stores.getWritablePreferenceStore(second).setValue("paths.directoryPaths", importRoot);
+    URI root = URI.createURI("archive:" + jar + "!/");
+    XtextEditor sourceA = editionsSource(first);
+    XtextEditor sourceB = editionsSource(second);
+    XtextEditor firstArchive = null;
+    XtextEditor firstFeatures = null;
+    XtextEditor firstSelectedDescriptor = null;
+    for (IProject project : new IProject[] { first, second }) {
+      XtextEditor source = project == first ? sourceA : sourceB;
+      XtextEditor other = project == first ? sourceB : sourceA;
+      URI descriptor = project == first ? firstDescriptor : secondDescriptor;
+      assertContext(source, project, descriptor);
+
+      // Capture every link in its real invoking editor, then activate the other project before opening it.
+      XtextEditor edition = followAfterSwitch(source, "editions.proto", other);
+      assertArchive(edition, root.appendSegment("editions.proto"), project, descriptor, EDITIONS);
+      XtextEditor features = followAfterSwitch(edition, "archive-features.proto", other);
+      assertArchive(features, root.appendSegment("archive-features.proto"), project, descriptor, ARCHIVE_FEATURES);
+
+      assertSame(features, followAfterSwitch(edition, "archiveproof.archive_features", other));
+      assertSelected(features, "archive_features");
+      assertSame(features, followAfterSwitch(edition, "mode =", other));
+      assertSelected(features, "mode");
+      assertSame(features, followAfterSwitch(edition, "MODE_ENABLED;", other));
+      assertSelected(features, "MODE_ENABLED");
+
+      XtextEditor selected = followAfterSwitch(edition, CANONICAL, other);
+      selected.getDocument().readOnly(resource -> {
+        assertEquals(descriptor, resource.getURI());
+        assertSame(project, EResources.getProjectOf(resource));
+        assertClean(resource);
+        return null;
+      });
+      assertSame(selected, followAfterSwitch(edition, "field_presence =", other));
+      assertSelected(selected, "field_presence");
+      assertSame(selected, followAfterSwitch(edition, "EXPLICIT;", other));
+      assertSelected(selected, "EXPLICIT");
+      // Metadata inside the archive definition must navigate to the same selected descriptor too.
+      assertSame(selected, followAfterSwitch(features, "TARGET_TYPE_FILE", other));
+      assertSelected(selected, "TARGET_TYPE_FILE");
+      assertSame(selected, followAfterSwitch(features, "EDITION_2023", other));
+      assertSelected(selected, "EDITION_2023");
+
+      assertReadOnly(edition);
+      assertReadOnly(features);
+      if (project == first) {
+        firstArchive = edition;
+        firstFeatures = features;
+        firstSelectedDescriptor = selected;
+      } else {
+        assertNotSame(firstArchive, edition);
+        assertNotSame(firstFeatures, features);
+        assertNotSame(firstSelectedDescriptor, selected);
+        assertFalse(firstArchive.getEditorInput().equals(edition.getEditorInput()));
+        assertFalse(firstFeatures.getEditorInput().equals(features.getEditorInput()));
+      }
+    }
+  }
+
+  private XtextEditor followAfterSwitch(XtextEditor origin, String token, XtextEditor other) {
+    page.activate(origin);
+    IHyperlink captured = hyperlink(origin, token);
+    page.activate(other);
+    return follow(captured);
+  }
+
+  private XtextEditor editionsSource(IProject project) throws Exception {
+    IFile file = write(project, "editions-source.proto", "edition = \"2024\"; "
+        + "import \"google/protobuf/descriptor.proto\"; import option \"editions.proto\"; "
+        + "option features.field_presence = EXPLICIT; message Source { int32 value = 1; }");
+    return remember(page.openEditor(new FileEditorInput(file), "com.google.eclipse.protobuf.Protobuf"));
   }
 
   private void exerciseNavigation(URI jar, String importRoot) throws Exception {
@@ -296,12 +403,15 @@ public class ArchiveNavigation_Test {
     editor.getDocument().readOnly(resource -> {
       assertSame(project, EResources.getProjectOf(resource));
       assertClean(resource);
-      NativeOption option = EcoreUtil2.getAllContentsOfType(resource.getContents().get(0), NativeOption.class).get(0);
-      assertFalse(option.getSource().getTarget().eIsProxy());
-      assertEquals(descriptor, option.getSource().getTarget().eResource().getURI());
+      AbstractOption option = EcoreUtil2.getAllContentsOfType(resource.getContents().get(0), AbstractOption.class)
+          .stream().filter(options::isNative).findFirst().get();
+      com.google.eclipse.protobuf.protobuf.IndexedElement target = options.rootSourceOf(option);
+      assertNotNull(target);
+      assertFalse(target.eIsProxy());
+      assertEquals(descriptor, target.eResource().getURI());
       Import canonical = EcoreUtil2.getAllContentsOfType(resource.getContents().get(0), Import.class).stream()
           .filter(value -> CANONICAL.equals(imports.getPath(value))).findFirst().get();
-      assertSame(option.getSource().getTarget().eResource(), imports.importedResource(canonical));
+      assertSame(target.eResource(), imports.importedResource(canonical));
       return null;
     });
   }
@@ -375,6 +485,8 @@ public class ArchiveNavigation_Test {
       entry(zip, "dependency.proto", DEPENDENCY);
       entry(zip, "nested.proto", NESTED);
       entry(zip, "standalone.proto", STANDALONE);
+      entry(zip, "editions.proto", EDITIONS);
+      entry(zip, "archive-features.proto", ARCHIVE_FEATURES);
     }
     return bytes.toByteArray();
   }

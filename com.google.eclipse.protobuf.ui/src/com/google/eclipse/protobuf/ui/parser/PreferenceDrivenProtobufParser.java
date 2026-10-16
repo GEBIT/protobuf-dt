@@ -15,8 +15,8 @@ import org.eclipse.xtext.parser.IParseResult;
 import org.eclipse.xtext.parser.ParseResult;
 import org.eclipse.xtext.ui.editor.preferences.IPreferenceStoreAccess;
 
+import com.google.eclipse.protobuf.parser.RecoveringProtobufParser;
 import com.google.eclipse.protobuf.parser.UnknownSyntaxProtobuf;
-import com.google.eclipse.protobuf.parser.antlr.ProtobufParser;
 import com.google.eclipse.protobuf.protobuf.Protobuf;
 import com.google.eclipse.protobuf.ui.preferences.misc.MiscellaneousPreferences;
 import com.google.inject.Inject;
@@ -24,7 +24,7 @@ import com.google.inject.Inject;
 /**
  * @author alruiz@google.com (Alex Ruiz)
  */
-public class PreferenceDrivenProtobufParser extends ProtobufParser {
+public class PreferenceDrivenProtobufParser extends RecoveringProtobufParser {
   @Inject private IPreferenceStoreAccess storeAccess;
 
   @Override protected IParseResult doParse(String ruleName, CharStream in, NodeModelBuilder builder,
@@ -41,7 +41,7 @@ public class PreferenceDrivenProtobufParser extends ProtobufParser {
     EObject rootObj = result.getRootASTElement();
     if (rootObj instanceof Protobuf) {
       Protobuf root = (Protobuf) result.getRootASTElement();
-      return root == null || root.getSyntax() == null;
+      return root.getSyntax() == null && root.getEdition() == null && root.getMisplacedHeaders().isEmpty();
     }
     
     return rootObj == null;
