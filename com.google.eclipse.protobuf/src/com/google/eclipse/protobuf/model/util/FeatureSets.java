@@ -682,21 +682,22 @@ public class FeatureSets {
       return Messages.invalidFeatureKind;
     if (info.error != null) return info.error;
     if (info.targets.isEmpty()) return Messages.invalidFeatureTargetsRequired;
-    if (info.introduced == null) return Messages.invalidFeatureIntroduction;
+    if (info.introduced == null && !info.legacyFeatureSchema) return Messages.invalidFeatureIntroduction;
     String support = invalidSupport(info, null);
     if (support != null) return support;
-    boolean legacy = false;
+    boolean baseline = false;
     Set<Long> editions = new HashSet<Long>();
     Long edition2023 = info.edition2023;
     for (FeatureMetadata.Default entry : info.defaults) {
       if (!editions.add(entry.edition)) return Messages.invalidFeatureDuplicateDefault;
-      if ("EDITION_LEGACY".equals(entry.editionName)) legacy = true;
+      if ("EDITION_LEGACY".equals(entry.editionName)
+          || info.legacyFeatureSchema && "EDITION_PROTO2".equals(entry.editionName)) baseline = true;
       if (defaultText(field, entry.text) == null) return Messages.invalidFeatureDefaultValue;
-      if (edition2023 != null && entry.edition >= edition2023
+      if (edition2023 != null && info.introduced != null && entry.edition >= edition2023
           && (entry.edition < info.introduced || info.removed != null && entry.edition > info.removed))
         return Messages.invalidFeatureDefaultWindow;
     }
-    if (!legacy) return Messages.invalidFeatureLegacyDefault;
+    if (!baseline) return Messages.invalidFeatureLegacyDefault;
     if (type instanceof com.google.eclipse.protobuf.protobuf.Enum) for (EObject member : type.eContents()) {
       if (member instanceof Literal) {
         String invalid = invalidSupport(metadata.of(member), info);

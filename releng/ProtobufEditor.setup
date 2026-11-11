@@ -70,6 +70,10 @@
             name="org.eclipse.xtext.sdk.feature.group"/>
         <requirement
             name="com.google.guava"/>
+        <requirement
+            name="org.eclipse.m2e.core"/>
+        <requirement
+            name="org.eclipse.m2e.maven.runtime"/>
         <sourceLocator
             rootFolder="${git.clone.protobuf-dt.location}"/>
         <repositoryList

@@ -522,6 +522,80 @@ public class EditionValidator_Test {
         + "option (config).features=false;"));
   }
 
+  @Test public void should_validate_legacy_descriptor_feature_definitions_without_support_schema() throws Exception {
+    IPreferenceStore store = preferences.getWritablePreferenceStore();
+    boolean wasDefault = store.isDefault(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+    String previous = store.getString(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+    try {
+      List<Issue> issues = validate(selectLegacyDescriptor());
+      assertNoLinking(issues);
+      assertTrue(xtext.resource().getErrors().toString(), xtext.resource().getErrors().isEmpty());
+      assertNoCode(issues, EditionValidator.INVALID_FEATURE_DEFINITION);
+      com.google.eclipse.protobuf.protobuf.Message set = named("FeatureSet", com.google.eclipse.protobuf.protobuf.Message.class);
+      for (String name : new String[] {"field_presence", "enum_type", "repeated_field_encoding",
+          "utf8_validation", "message_encoding", "json_format"}) {
+        boolean found = false;
+        for (EObject member : set.eContents()) if (member instanceof MessageField
+            && name.equals(((MessageField) member).getName())) {
+          assertFalse(issues.toString(), hasErrorOn(issues, member));
+          found = true;
+        }
+        assertTrue("Missing FeatureSet field " + name, found);
+      }
+    } finally {
+      if (wasDefault) store.setToDefault(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+      else store.setValue(PreferenceNames.DESCRIPTOR_PROTO_PATH, previous);
+      descriptors.invalidateCacheFor(null);
+    }
+  }
+
+  @Test public void should_reject_malformed_legacy_feature_defaults() throws Exception {
+    IPreferenceStore store = preferences.getWritablePreferenceStore();
+    boolean wasDefault = store.isDefault(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+    String previous = store.getString(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+    try {
+      String source = selectLegacyDescriptor();
+      String baseline = "edition_defaults = { edition: EDITION_PROTO2, value: \"EXPLICIT\" },";
+      for (String replacement : new String[] {baseline.replace("EXPLICIT", "NOT_A_PRESENCE"),
+          baseline + baseline, ""}) {
+        List<Issue> issues = validate(source.replace(baseline, replacement));
+        assertNoLinking(issues);
+        assertTrue(xtext.resource().getErrors().toString(), xtext.resource().getErrors().isEmpty());
+        assertOn(issues, EditionValidator.INVALID_FEATURE_DEFINITION, named("field_presence", MessageField.class));
+      }
+    } finally {
+      if (wasDefault) store.setToDefault(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+      else store.setValue(PreferenceNames.DESCRIPTOR_PROTO_PATH, previous);
+      descriptors.invalidateCacheFor(null);
+    }
+  }
+
+  @Test public void should_keep_edition_2024_unavailable_with_2023_only_legacy_descriptor() throws Exception {
+    IPreferenceStore store = preferences.getWritablePreferenceStore();
+    boolean wasDefault = store.isDefault(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+    String previous = store.getString(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+    try {
+      selectLegacyDescriptor();
+      List<Issue> issues = validate("edition = \"2024\"; message M { int32 value = 1; }");
+      assertNoLinking(issues);
+      assertTrue(xtext.resource().getErrors().toString(), xtext.resource().getErrors().isEmpty());
+      assertCount(issues, EditionValidator.EDITIONS_FEATURES_UNAVAILABLE, Severity.ERROR, 1);
+      assertOn(issues, EditionValidator.EDITIONS_FEATURES_UNAVAILABLE, xtext.root().getEdition());
+    } finally {
+      if (wasDefault) store.setToDefault(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+      else store.setValue(PreferenceNames.DESCRIPTOR_PROTO_PATH, previous);
+      descriptors.invalidateCacheFor(null);
+    }
+  }
+
+  private String selectLegacyDescriptor() throws Exception {
+    File fixture = new File("resources/legacy-descriptor/google/protobuf/descriptor.proto");
+    URI selected = URI.createURI(fixture.toURI().toString());
+    preferences.getWritablePreferenceStore().setValue(PreferenceNames.DESCRIPTOR_PROTO_PATH, selected.toString());
+    descriptors.invalidateCacheFor(null);
+    return new String(Files.readAllBytes(fixture.toPath()), StandardCharsets.UTF_8);
+  }
+
   @Test public void should_report_one_header_error_for_missing_or_incomplete_selected_metadata() throws Exception {
     IPreferenceStore store = preferences.getWritablePreferenceStore();
     boolean wasDefault = store.isDefault(PreferenceNames.DESCRIPTOR_PROTO_PATH);

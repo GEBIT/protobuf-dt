@@ -22,6 +22,7 @@ import com.google.eclipse.protobuf.protobuf.ComplexValueField;
 import com.google.eclipse.protobuf.protobuf.IndexedElement;
 import com.google.eclipse.protobuf.protobuf.Literal;
 import com.google.eclipse.protobuf.protobuf.LiteralLink;
+import com.google.eclipse.protobuf.protobuf.Message;
 import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.eclipse.protobuf.protobuf.OptionField;
 import com.google.eclipse.protobuf.protobuf.SimpleValueField;
@@ -58,10 +59,12 @@ class FeatureMetadata {
     final String introducedName, deprecatedName, removedName, warning, removalError;
     final List<Default> defaults;
     final String error;
+    final boolean legacyFeatureSchema;
     Info(Set<String> targets, Map<String, Value> support, List<Default> defaults,
-        String error, FeatureMetadata reader) {
+        String error, boolean legacyFeatureSchema, FeatureMetadata reader) {
       this.targets = Collections.unmodifiableSet(targets);
       this.defaults = Collections.unmodifiableList(defaults);
+      this.legacyFeatureSchema = legacyFeatureSchema;
       introduced = reader.edition(support.get("edition_introduced"));
       deprecated = reader.edition(support.get("edition_deprecated"));
       removed = reader.edition(support.get("edition_removed"));
@@ -114,7 +117,7 @@ class FeatureMetadata {
 
   private Info empty() {
     return new Info(new LinkedHashSet<String>(), new LinkedHashMap<String, Value>(),
-        new ArrayList<Default>(), null, this);
+        new ArrayList<Default>(), null, false, this);
   }
 
   private Info read(EObject declaration) {
@@ -123,10 +126,22 @@ class FeatureMetadata {
     List<Default> defaults = new ArrayList<Default>();
     String error = null;
     boolean supportAggregate = false;
+    EObject fieldOptions = null;
+    boolean conflictingOwners = false;
+    boolean unresolvedNativeRoot = false;
     for (AbstractOption option : optionsOf(declaration)) {
+      if (!options.isNative(option)) continue;
       IndexedElement root = options.rootSourceOf(option);
-      String owner = declaration instanceof Literal ? "EnumValueOptions" : "FieldOptions";
-      if (!options.isNative(option) || !descriptorType(root == null ? null : root.eContainer(), owner)) continue;
+      if (root == null || root.eIsProxy() || root.eResource() == null) {
+        unresolvedNativeRoot = true;
+        continue;
+      }
+      EObject owner = root.eContainer();
+      if (!descriptorType(owner, declaration instanceof Literal ? "EnumValueOptions" : "FieldOptions")) continue;
+      if (!(declaration instanceof Literal)) {
+        if (fieldOptions == null) fieldOptions = owner;
+        else if (fieldOptions != owner) conflictingOwners = true;
+      }
       String name = name(root);
       if ("targets".equals(name)) {
         String target = enumName(option.getValue());
@@ -150,7 +165,21 @@ class FeatureMetadata {
         else defaults.add(new Default(edition, enumName(record.get("edition")), text));
       }
     }
-    return new Info(targets, support, defaults, error, this);
+    boolean legacy = !conflictingOwners && !unresolvedNativeRoot && legacyFeatureSchema(fieldOptions);
+    return new Info(targets, support, defaults, error, legacy, this);
+  }
+
+  private boolean legacyFeatureSchema(EObject fieldOptions) {
+    if (!(fieldOptions instanceof Message) || fieldOptions.eIsProxy() || fieldOptions.eResource() == null
+        || !descriptorType(fieldOptions, "FieldOptions")) return false;
+    return cache.get(Tuples.create(FeatureMetadata.class, "legacyFeatureSchema", fieldOptions),
+        fieldOptions.eResource(), () -> readLegacyFeatureSchema(fieldOptions));
+  }
+
+  private boolean readLegacyFeatureSchema(EObject fieldOptions) {
+    for (EObject member : fieldOptions.eContents())
+      if (member instanceof MessageField && "feature_support".equals(((MessageField) member).getName())) return false;
+    return true;
   }
 
   private Map<String, Value> record(AbstractOption option) {

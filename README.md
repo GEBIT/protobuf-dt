@@ -24,6 +24,12 @@ extensions, inherited leaf settings, support windows and deprecation warnings us
 same policy in validation and completion. Incomplete descriptors are diagnosed without
 silently substituting bundled feature definitions.
 
+Legacy descriptors whose linked FieldOptions schema cannot express feature_support
+may omit feature introduction metadata and use EDITION_PROTO2 legacy defaults.
+Typed defaults, targets and all other expressible definition checks still apply.
+Defaults come from the selected schema; compatibility does not supply missing
+editions or newer features from bundled descriptors.
+
 Edition 2024 supports option-only imports and per-type `export`/`local` visibility in
 the actual reference scopes, including hyperlinks and completion. Naming rules and
 STRICT visibility follow the selected feature policy. Reserved names use identifiers
@@ -94,6 +100,12 @@ Click **Finish**.
 
 Wait for Eclipse to install, then click **Finish** to close the wizard. Wait for
 the build to finish.
+
+The `protobuf` targlet must include `org.eclipse.m2e.core` and
+`org.eclipse.m2e.maven.runtime` to compile the Maven integration sources. The setup
+declares both explicitly: their optional runtime dependencies alone do not ensure
+that Oomph includes them in the development target. m2e remains optional when
+running the installed editor.
 
 Expand **releng**.
 

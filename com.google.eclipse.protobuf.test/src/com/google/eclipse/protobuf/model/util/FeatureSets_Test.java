@@ -4,6 +4,9 @@ import static com.google.eclipse.protobuf.junit.core.IntegrationTestModule.integ
 import static com.google.eclipse.protobuf.junit.core.XtextRule.overrideRuntimeModuleWith;
 import static org.junit.Assert.*;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -15,6 +18,7 @@ import org.eclipse.emf.ecore.util.EcoreUtil;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.xtext.EcoreUtil2;
 import org.eclipse.xtext.diagnostics.Diagnostic;
+import org.eclipse.xtext.diagnostics.Severity;
 import org.eclipse.xtext.resource.XtextResource;
 import org.eclipse.xtext.ui.editor.preferences.IPreferenceStoreAccess;
 import org.eclipse.xtext.util.CancelIndicator;
@@ -32,6 +36,7 @@ import com.google.eclipse.protobuf.protobuf.Literal;
 import com.google.eclipse.protobuf.protobuf.Message;
 import com.google.eclipse.protobuf.protobuf.MessageField;
 import com.google.eclipse.protobuf.scoping.ProtoDescriptorProvider;
+import com.google.eclipse.protobuf.validation.EditionValidator;
 import com.google.inject.Inject;
 
 public class FeatureSets_Test {
@@ -295,6 +300,105 @@ public class FeatureSets_Test {
       else store.setValue(PreferenceNames.DESCRIPTOR_PROTO_PATH, previous);
       descriptors.invalidateCacheFor(null);
     }
+  }
+
+  @Test public void should_follow_legacy_schema_capability_and_selected_defaults_across_selection_and_reparse()
+      throws Exception {
+    File legacy = new File("resources/legacy-descriptor/google/protobuf/descriptor.proto");
+    File modern = new File("resources/protobuf-java-4.36.2/google/protobuf/descriptor.proto");
+    URI legacyUri = URI.createURI(legacy.toURI().toString());
+    URI modernUri = URI.createURI(modern.toURI().toString());
+    String legacyText = new String(Files.readAllBytes(legacy.toPath()), StandardCharsets.UTF_8);
+    String modernText = new String(Files.readAllBytes(modern.toPath()), StandardCharsets.UTF_8);
+    String source = "edition = \"2023\";\n"
+        + "import \"google/protobuf/descriptor.proto\";\n"
+        + "extend google.protobuf.FeatureSet { Payload custom = 9995; }\n"
+        + "message Payload {\n"
+        + "  bool enabled = 1 [\n"
+        + "    targets = TARGET_TYPE_FILE,\n"
+        + "    edition_defaults = { edition: EDITION_PROTO2, value: \"true\" }\n"
+        + "  ];\n"
+        + "}\n"
+        + "enum E { ZERO = 0; }\n"
+        + "message M {\n"
+        + "  int32 value = 1;\n"
+        + "  repeated int32 numbers = 2;\n"
+        + "  string text = 3;\n"
+        + "}\n";
+    IPreferenceStore store = preferences.getWritablePreferenceStore();
+    boolean wasDefault = store.isDefault(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+    String previous = store.getString(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+    try {
+      store.setValue(PreferenceNames.DESCRIPTOR_PROTO_PATH, legacyUri.toString());
+      descriptors.invalidateCacheFor(null);
+      xtext.parseText(source);
+      EcoreUtil.resolveAll(xtext.resource());
+      assertSelectedSchemaPolicy(legacyUri, true);
+      Resource selected = descriptor();
+
+      store.setValue(PreferenceNames.DESCRIPTOR_PROTO_PATH, modernUri.toString());
+      descriptors.invalidateCacheFor(null);
+      xtext.resource().reparse(source);
+      EcoreUtil.resolveAll(xtext.resource());
+      assertSelectedSchemaPolicy(modernUri, false);
+
+      store.setValue(PreferenceNames.DESCRIPTOR_PROTO_PATH, legacyUri.toString());
+      descriptors.invalidateCacheFor(null);
+      xtext.resource().reparse(source);
+      EcoreUtil.resolveAll(xtext.resource());
+      assertSelectedSchemaPolicy(legacyUri, true);
+      assertSame(selected, descriptor());
+
+      ((XtextResource) selected).reparse(modernText);
+      EcoreUtil.resolveAll(selected);
+      xtext.resource().reparse(source);
+      EcoreUtil.resolveAll(xtext.resource());
+      assertSelectedSchemaPolicy(legacyUri, false);
+      assertSame(selected, descriptor());
+
+      ((XtextResource) selected).reparse(legacyText);
+      EcoreUtil.resolveAll(selected);
+      xtext.resource().reparse(source);
+      EcoreUtil.resolveAll(xtext.resource());
+      assertSelectedSchemaPolicy(legacyUri, true);
+      assertSame(selected, descriptor());
+    } finally {
+      if (wasDefault) store.setToDefault(PreferenceNames.DESCRIPTOR_PROTO_PATH);
+      else store.setValue(PreferenceNames.DESCRIPTOR_PROTO_PATH, previous);
+      descriptors.invalidateCacheFor(null);
+    }
+  }
+
+  private void assertSelectedSchemaPolicy(URI selectedUri, boolean legacy) {
+    EObject root = xtext.resource().getContents().get(0);
+    assertEquals(selectedUri, descriptors.primaryDescriptor(xtext.resource()).location);
+    assertTrue(features.hasRequiredMetadata(root));
+    for (String name : new String[] {"field_presence", "enum_type", "repeated_field_encoding",
+        "utf8_validation", "message_encoding", "json_format"}) {
+      assertEquals(selectedUri, corePath(name).get(0).eResource().getURI());
+      assertSame(descriptor(), corePath(name).get(0).eResource());
+    }
+    assertEquals("EXPLICIT", features.coreValue(named(root, "value", MessageField.class), "field_presence"));
+    com.google.eclipse.protobuf.protobuf.Enum enumeration = named(root, "E", com.google.eclipse.protobuf.protobuf.Enum.class);
+    assertEquals("OPEN", features.coreValue(enumeration, "enum_type"));
+    assertEquals(Boolean.TRUE, features.isOpenEnum(enumeration));
+    assertEquals("PACKED", features.coreValue(named(root, "numbers", MessageField.class), "repeated_field_encoding"));
+    assertEquals("VERIFY", features.coreValue(named(root, "text", MessageField.class), "utf8_validation"));
+    assertEquals("LENGTH_PREFIXED", features.coreValue(root, "message_encoding"));
+    assertEquals("ALLOW", features.coreValue(named(root, "M", Message.class), "json_format"));
+    List<IndexedElement> custom = extensionPath("custom", "enabled");
+    assertEquals(legacy, features.invalidDefinition(custom.get(1)) == null);
+    assertEquals(legacy ? "true" : null, features.effectiveValue(root, custom));
+    assertEquals(legacy, features.canAssign(root, custom, null));
+    boolean invalidLeaf = false;
+    for (Issue issue : validator.validate(xtext.resource(), CheckMode.ALL, CancelIndicator.NullImpl)) {
+      assertFalse(issue.toString(), Diagnostic.LINKING_DIAGNOSTIC.equals(issue.getCode()));
+      if (EditionValidator.INVALID_FEATURE_DEFINITION.equals(issue.getCode())
+          && issue.getSeverity() == Severity.ERROR && EcoreUtil.getURI(custom.get(1)).equals(issue.getUriToProblem()))
+        invalidLeaf = true;
+    }
+    assertEquals(!legacy, invalidLeaf);
+    assertTrue(xtext.resource().getErrors().toString(), xtext.resource().getErrors().isEmpty());
   }
 
   @Test public void should_keep_metadata_and_values_local_to_each_resource_set() {
